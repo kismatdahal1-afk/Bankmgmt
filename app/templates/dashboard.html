@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Operations Dashboard{% endblock %}
+{% block page_title %}Operations Dashboard{% endblock %}
+{% block page_subtitle %}Real-time village bank metrics and activity overview{% endblock %}
+
+{% block content %}
+<!-- Grid Stats -->
+<div class="grid-stats">
+    <!-- Stat Card 1 -->
+    <div class="card-stat stat-success">
+        <span class="stat-title">Active Members</span>
+        <span class="stat-value">{{ total_customers }}</span>
+        <span class="stat-sub">Registered cooperative members</span>
+    </div>
+
+    <!-- Stat Card 2 -->
+    <div class="card-stat">
+        <span class="stat-title">Vault Balance (Savings)</span>
+        <span class="stat-value">${{ "{:,.2f}".format(total_deposits_balance) }}</span>
+        <span class="stat-sub">Net deposits currently in vault</span>
+    </div>
+
+    <!-- Stat Card 3 -->
+    <div class="card-stat stat-warning">
+        <span class="stat-title">Outstanding Loans</span>
+        <span class="stat-value">${{ "{:,.2f}".format(total_loan_receivable) }}</span>
+        <span class="stat-sub">{{ active_loans_count }} Active Credit Accounts</span>
+    </div>
+
+    <!-- Stat Card 4 -->
+    <div class="card-stat stat-danger">
+        <span class="stat-title">Ledger Turnover</span>
+        <span class="stat-value">${{ "{:,.2f}".format((total_deposits_volume|float) + (total_withdrawals_volume|float)) }}</span>
+        <span class="stat-sub">Historical transacted volume</span>
+    </div>
+</div>
+
+<!-- Main Dashboard Split Content -->
+<div style="display: flex; gap: 30px; flex-wrap: wrap; margin-top: 10px;">
+    <!-- Chart Container (Left) -->
+    <div class="table-container" style="flex: 2; min-width: 450px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+        <span class="table-title" style="color: #fff; font-weight: 700;">Transaction Trends (Last 7 Days)</span>
+        <div style="position: relative; width: 100%; height: 320px;">
+            <canvas id="trendsChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Transactions Ledger (Right) -->
+    <div class="table-container" style="flex: 1.5; min-width: 380px;">
+        <div class="table-header-bar">
+            <span class="table-title">Recent Transactions</span>
+            <a href="{{ url_for('transaction.transactions_list') }}" style="font-size: 0.85rem; color: var(--accent-color); text-decoration: none; font-weight: 600;">View Ledger</a>
+        </div>
+        
+        <table class="custom-table" style="font-size: 0.9rem;">
+            <thead>
+                <tr>
+                    <th>Member</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if recent_transactions %}
+                    {% for txn in recent_transactions %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 600; color: #fff;">{{ txn.account.customer.full_name }}</span>
+                                <span style="font-size: 0.75rem; color: var(--text-secondary);">Acc: {{ txn.account.account_number }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {% if txn.type == 'deposit' %}badge-success{% else %}badge-danger{% endif %}" style="font-size: 0.7rem; padding: 2px 6px;">
+                                {{ txn.type }}
+                            </span>
+                        </td>
+                        <td style="font-weight: 700; {% if txn.type == 'deposit' %}color: var(--success);{% else %}color: var(--danger);{% endif %}">
+                            {% if txn.type == 'deposit' %}+{% else %}-{% endif %}${{ "{:,.2f}".format(txn.amount) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            No recent transactions found.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const ctx = document.getElementById('trendsChart').getContext('2d');
+        
+        // Dynamic arrays injected from Flask context
+        const labels = {{ date_labels|tojson }};
+        const deposits = {{ daily_deposits|tojson }};
+        const withdrawals = {{ daily_withdrawals|tojson }};
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Deposits ($)',
+                        data: deposits,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Withdrawals ($)',
+                        data: withdrawals,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#f3f4f6',
+                            font: {
+                                family: 'Plus Jakarta Sans',
+                                weight: '500'
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: '#374151'
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: {
+                                family: 'Plus Jakarta Sans'
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: '#374151'
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: {
+                                family: 'Plus Jakarta Sans'
+                            },
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

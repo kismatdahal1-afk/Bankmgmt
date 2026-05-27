@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Funds - Village Bank{% endblock %}
+{% block page_title %}{{ action }} Funds{% endblock %}
+{% block page_subtitle %}
+    {% if action == "Deposit" %}
+        Credit funds into a member's active bank account
+    {% else %}
+        Debit funds from a member's active bank account
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: flex-start; margin-bottom: 10px;">
+    <a href="{{ url_for('transaction.transactions_list') }}" class="btn btn-secondary">
+        <span class="material-symbols-rounded">arrow_back</span>
+        Back to Ledger
+    </a>
+</div>
+
+<div style="display: flex; justify-content: center;">
+    <div class="form-card">
+        <form method="POST" action="{% if action == 'Deposit' %}{{ url_for('transaction.deposit') }}{% else %}{{ url_for('transaction.withdraw') }}{% endif %}">
+            
+            <div class="form-group">
+                <label for="account_number">Select Target Account</label>
+                <select id="account_number" name="account_number" class="form-control" required>
+                    <option value="" disabled {% if not selected_account_num %}selected{% endif %}>-- Choose Account --</option>
+                    {% for acc in accounts %}
+                        <option value="{{ acc.account_number }}" 
+                                {% if selected_account_num == acc.account_number %}selected{% endif %}>
+                            {{ acc.customer.full_name }} (Acc: {{ acc.account_number }} - Bal: ${{ "{:,.2f}".format(acc.balance) }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="amount">Transaction Amount ($)</label>
+                <input type="number" id="amount" name="amount" class="form-control" 
+                       step="0.01" min="0.01" required placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+                <label for="description">Memo / Description</label>
+                <input type="text" id="description" name="description" class="form-control" 
+                       placeholder="e.g. Cash {% if action == 'Deposit' %}deposit{% else %}withdrawal{% endif %}" maxlength="200">
+            </div>
+
+            <button type="submit" class="btn {% if action == 'Deposit' %}btn-success{% else %}btn-danger{% endif %}" style="width: 100%; margin-top: 20px;">
+                <span class="material-symbols-rounded">
+                    {% if action == 'Deposit' %}add_circle{% else %}remove_circle{% endif %}
+                </span>
+                Execute {{ action }}
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Loan Repayment - Village Bank{% endblock %}
+{% block page_title %}Record Loan Repayment{% endblock %}
+{% block page_subtitle %}Process credit instalment payments against active contracts{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: flex-start; margin-bottom: 10px;">
+    <a href="{{ url_for('loan.loans_list') }}" class="btn btn-secondary">
+        <span class="material-symbols-rounded">arrow_back</span>
+        Back to Loans
+    </a>
+</div>
+
+<div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; align-items: flex-start;">
+    <!-- Repayment Form -->
+    <div class="form-card" style="flex: 1; max-width: 500px;">
+        <form method="POST" action="{{ url_for('loan.repay_loan', loan_id=loan.id) }}">
+            <h3 style="margin-bottom: 20px; color: #fff;">Record Payment Details</h3>
+            
+            <div class="form-group">
+                <label for="amount">Repayment Amount ($)</label>
+                <input type="number" id="amount" name="amount" class="form-control" 
+                       step="0.01" min="0.01" max="{{ remaining_balance }}" 
+                       value="{{ '{:.2f}'.format(loan.emi) if loan.emi < remaining_balance else '{:.2f}'.format(remaining_balance) }}" required>
+            </div>
+
+            <div class="form-group">
+                <label>Payment Method</label>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary);">
+                        <input type="radio" name="payment_method" value="cash" checked style="accent-color: var(--accent-color);">
+                        Cash Repayment (Physical ledger deposit)
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary);">
+                        <input type="radio" name="payment_method" value="account" {% if not active_account %}disabled{% endif %} style="accent-color: var(--accent-color);">
+                        Debit Savings Account
+                        {% if active_account %}
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">
+                                (Acc: {{ active_account.account_number }} - Bal: ${{ "{:,.2f}".format(active_account.balance) }})
+                            </span>
+                        {% else %}
+                            <span style="font-size: 0.8rem; color: var(--danger);">
+                                (No active savings account registered)
+                            </span>
+                        {% endif %}
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 20px;">
+                <span class="material-symbols-rounded">payments</span>
+                Record Repayment
+            </button>
+        </form>
+    </div>
+
+    <!-- Loan Summary Card -->
+    <div class="form-card" style="flex: 1; max-width: 400px; background-color: rgba(255, 255, 255, 0.02);">
+        <h3 style="margin-bottom: 20px; color: #fff; display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-rounded" style="color: var(--warning);">info</span>
+            Contract Summary
+        </h3>
+        
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">Contract ID:</span>
+                <code style="font-family: monospace; font-weight: 700; color: #fff;">{{ loan.loan_number }}</code>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">Borrower:</span>
+                <span style="font-weight: 600; color: #fff;">{{ loan.customer.full_name }}</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">Principal:</span>
+                <span style="font-weight: 600; color: #fff;">${{ "{:,.2f}".format(loan.amount) }}</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">EMI Amount:</span>
+                <span style="font-weight: 600; color: #fff;">${{ "{:,.2f}".format(loan.emi) }}/mo</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">Total Paid:</span>
+                <span style="font-weight: 600; color: var(--success);">${{ "{:,.2f}".format(loan.total_paid) }}</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <span style="color: var(--text-secondary);">Remaining Payable:</span>
+                <span style="font-weight: 700; color: var(--warning);">${{ "{:,.2f}".format(remaining_balance) }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

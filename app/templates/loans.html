@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Loan Portfolio{% endblock %}
+{% block page_title %}Loan Management{% endblock %}
+{% block page_subtitle %}Manage credit applications, approvals, and installment repayments{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+    <a href="{{ url_for('loan.apply_loan') }}" class="btn btn-primary">
+        <span class="material-symbols-rounded">add_circle</span>
+        Apply for Loan
+    </a>
+</div>
+
+<div class="table-container">
+    <div class="table-header-bar">
+        <span class="table-title">Loan Contracts ledger</span>
+        <span style="font-size: 0.85rem; color: var(--text-secondary);">Total Contracts: {{ loans|length }}</span>
+    </div>
+    
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>Loan ID</th>
+                <th>Member / Account</th>
+                <th>Principal</th>
+                <th>Rate / Term</th>
+                <th>EMI</th>
+                <th>Repayment Progress</th>
+                <th>Status</th>
+                <th style="text-align: right;">Operations</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if loans %}
+                {% for loan in loans %}
+                    {% set active_account = loan.customer.accounts|selectattr('status', 'equalto', 'active')|first %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <code style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">{{ loan.loan_number }}</code>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">{{ loan.applied_date.strftime('%Y-%m-%d') }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 600; color: #fff;">{{ loan.customer.full_name }}</span>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">
+                                    {% if active_account %}
+                                        Acc: {{ active_account.account_number }}
+                                    {% else %}
+                                        No active account
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </td>
+                        <td style="font-weight: 600; color: #fff;">
+                            ${{ "{:,.2f}".format(loan.amount) }}
+                        </td>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 500; color: #fff;">{{ loan.interest_rate }}% P.A.</span>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">{{ loan.duration_months }} Months</span>
+                            </div>
+                        </td>
+                        <td style="font-weight: 600; color: #fff;">
+                            ${{ "{:,.2f}".format(loan.emi) }}/mo
+                        </td>
+                        <td>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-weight: 600; color: #fff;">
+                                    ${{ "{:,.2f}".format(loan.total_paid) }} / ${{ "{:,.2f}".format(loan.total_payable) }}
+                                </span>
+                                {% set pct = (loan.total_paid / loan.total_payable * 100)|int %}
+                                <div style="width: 100%; height: 6px; background-color: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                    <div style="width: {{ pct }}%; height: 100%; background-color: var(--success); transition: var(--transition);"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if loan.status == 'pending' %}badge-warning
+                                {% elif loan.status == 'approved' %}badge-info
+                                {% elif loan.status == 'rejected' %}badge-danger
+                                {% elif loan.status == 'fully_paid' %}badge-success
+                                {% endif %}">
+                                {{ loan.status.replace('_', ' ') }}
+                            </span>
+                        </td>
+                        <td style="text-align: right;">
+                            <div style="display: inline-flex; gap: 8px;">
+                                {% if loan.status == 'pending' %}
+                                    {% if g.user and g.user.role == 'admin' %}
+                                        <form action="{{ url_for('loan.approve_loan', loan_id=loan.id) }}" method="POST" style="margin: 0;">
+                                            <button type="submit" class="btn btn-success btn-sm" title="Approve & Disburse">
+                                                <span class="material-symbols-rounded" style="font-size: 1.1rem;">check_circle</span>
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('loan.reject_loan', loan_id=loan.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to reject this loan application?');" style="margin: 0;">
+                                            <button type="submit" class="btn btn-danger btn-sm" title="Reject Application">
+                                                <span class="material-symbols-rounded" style="font-size: 1.1rem;">cancel</span>
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Admin Approval Required</span>
+                                    {% endif %}
+                                {% elif loan.status == 'approved' %}
+                                    <a href="{{ url_for('loan.repay_loan', loan_id=loan.id) }}" class="btn btn-primary btn-sm">
+                                        <span class="material-symbols-rounded" style="font-size: 1.1rem;">payments</span>
+                                        Repay
+                                    </a>
+                                {% else %}
+                                    <span style="font-size: 0.85rem; color: var(--text-muted);">Completed</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <span class="material-symbols-rounded" style="font-size: 3rem; display: block; margin-bottom: 12px;">handshake</span>
+                        No loan accounts exist in the portfolio database.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

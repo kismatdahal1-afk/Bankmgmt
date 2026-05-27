@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Reports - Village Bank{% endblock %}
+{% block page_title %}Financial Reports{% endblock %}
+{% block page_subtitle %}Generate daily ledgers, monthly statistics, or member-wise audits{% endblock %}
+
+{% block content %}
+<!-- Report Type Navigation Tabs -->
+<div style="display: flex; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; flex-wrap: wrap;">
+    <a href="{{ url_for('reports.reports', type='daily') }}" 
+       class="btn {% if report_type == 'daily' %}btn-primary{% else %}btn-secondary{% endif %}">
+        <span class="material-symbols-rounded">calendar_today</span>
+        Daily Ledger Report
+    </a>
+    <a href="{{ url_for('reports.reports', type='monthly') }}" 
+       class="btn {% if report_type == 'monthly' %}btn-primary{% else %}btn-secondary{% endif %}">
+        <span class="material-symbols-rounded">calendar_month</span>
+        Monthly Volume Summary
+    </a>
+    <a href="{{ url_for('reports.reports', type='customer') }}" 
+       class="btn {% if report_type == 'customer' %}btn-primary{% else %}btn-secondary{% endif %}">
+        <span class="material-symbols-rounded">badge</span>
+        Member-Wise Audit
+    </a>
+</div>
+
+<!-- Report Content Render Section -->
+
+<!-- 1. Daily Report Section -->
+{% if report_type == 'daily' %}
+<div class="grid-stats" style="margin-bottom: 24px;">
+    <div class="card-stat stat-success">
+        <span class="stat-title">Daily Deposits</span>
+        <span class="stat-value">${{ "{:,.2f}".format(daily_summary.deposits) }}</span>
+        <span class="stat-sub">Total credit transactions today</span>
+    </div>
+    <div class="card-stat stat-danger">
+        <span class="stat-title">Daily Withdrawals</span>
+        <span class="stat-value">${{ "{:,.2f}".format(daily_summary.withdrawals) }}</span>
+        <span class="stat-sub">Total debit transactions today</span>
+    </div>
+    <div class="card-stat stat-warning">
+        <span class="stat-title">Daily Repayments</span>
+        <span class="stat-value">${{ "{:,.2f}".format(daily_summary.repayments) }}</span>
+        <span class="stat-sub">Total loan collections today</span>
+    </div>
+    <div class="card-stat">
+        <span class="stat-title">Net Daily Cash Flow</span>
+        {% set net_flow = daily_summary.deposits + daily_summary.repayments - daily_summary.withdrawals %}
+        <span class="stat-value" style="{% if net_flow >= 0 %}color: var(--success);{% else %}color: var(--danger);{% endif %}">
+            {% if net_flow < 0 %}-{% endif %}${{ "{:,.2f}".format(net_flow|abs) }}
+        </span>
+        <span class="stat-sub">Net change in bank assets today</span>
+    </div>
+</div>
+
+<div class="table-container" style="margin-bottom: 24px;">
+    <div class="table-header-bar">
+        <span class="table-title">Today's Transactions Ledger ({{ today.strftime('%Y-%m-%d') }})</span>
+    </div>
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>Txn ID</th>
+                <th>Time</th>
+                <th>Member / Acc</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Memo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if daily_transactions %}
+                {% for txn in daily_transactions %}
+                    <tr>
+                        <td><code style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">{{ txn.transaction_uuid }}</code></td>
+                        <td>{{ txn.created_at.strftime('%H:%M:%S') }}</td>
+                        <td>{{ txn.account.customer.full_name }} (Acc: {{ txn.account.account_number }})</td>
+                        <td><span class="badge {% if txn.type == 'deposit' %}badge-success{% else %}badge-danger{% endif %}">{{ txn.type }}</span></td>
+                        <td style="font-weight: 700; {% if txn.type == 'deposit' %}color: var(--success);{% else %}color: var(--danger);{% endif %}">
+                            {% if txn.type == 'deposit' %}+{% else %}-{% endif %}${{ "{:,.2f}".format(txn.amount) }}
+                        </td>
+                        <td>{{ txn.description or '—' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        No transactions recorded today yet.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="table-container">
+    <div class="table-header-bar">
+        <span class="table-title">Today's Loan Repayments Collections ({{ today.strftime('%Y-%m-%d') }})</span>
+    </div>
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>Repayment ID</th>
+                <th>Time</th>
+                <th>Borrower / Loan Ref</th>
+                <th>Amount Paid</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if daily_repayments %}
+                {% for r in daily_repayments %}
+                    <tr>
+                        <td><code style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">RP-{{ r.id }}</code></td>
+                        <td>{{ r.repayment_date.strftime('%H:%M:%S') }}</td>
+                        <td>{{ r.loan.customer.full_name }} (Ref: {{ r.loan.loan_number }})</td>
+                        <td style="font-weight: 700; color: var(--success);">${{ "{:,.2f}".format(r.amount) }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        No loan repayments collected today.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 2. Monthly Report Section -->
+{% elif report_type == 'monthly' %}
+<div class="grid-stats" style="margin-bottom: 24px;">
+    <div class="card-stat stat-success">
+        <span class="stat-title">Monthly Deposits Volume</span>
+        <span class="stat-value">${{ "{:,.2f}".format(monthly_summary.deposits) }}</span>
+        <span class="stat-sub">Calendar month total credits</span>
+    </div>
+    <div class="card-stat stat-danger">
+        <span class="stat-title">Monthly Withdrawals Volume</span>
+        <span class="stat-value">${{ "{:,.2f}".format(monthly_summary.withdrawals) }}</span>
+        <span class="stat-sub">Calendar month total debits</span>
+    </div>
+    <div class="card-stat stat-warning">
+        <span class="stat-title">Monthly Repayments Volume</span>
+        <span class="stat-value">${{ "{:,.2f}".format(monthly_summary.repayments) }}</span>
+        <span class="stat-sub">Total credit repayments received</span>
+    </div>
+    <div class="card-stat">
+        <span class="stat-title">Total Monthly Activity</span>
+        <span class="stat-value">{{ monthly_transactions_count }}</span>
+        <span class="stat-sub">Active ledger lines compiled</span>
+    </div>
+</div>
+
+<div class="table-container" style="padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+    <h3 style="color: #fff; font-weight: 700;">Month Overview ({{ today.strftime('%B %Y') }})</h3>
+    <p style="color: var(--text-secondary); line-height: 1.6;">
+        During the current calendar month of <strong>{{ today.strftime('%B %Y') }}</strong>, the bank recorded a total cash intake (deposits + repayments) of 
+        <strong style="color: var(--success);">${{ "{:,.2f}".format(monthly_summary.deposits + monthly_summary.repayments) }}</strong> 
+        and a total cash withdrawal of 
+        <strong style="color: var(--danger);">${{ "{:,.2f}".format(monthly_summary.withdrawals) }}</strong>.
+    </p>
+    {% set monthly_net = monthly_summary.deposits + monthly_summary.repayments - monthly_summary.withdrawals %}
+    <p style="color: var(--text-secondary); line-height: 1.6;">
+        The net cash reserve position of the village bank fluctuated by 
+        <strong style="{% if monthly_net >= 0 %}color: var(--success);{% else %}color: var(--danger);{% endif %}">
+            {% if monthly_net < 0 %}-{% endif %}${{ "{:,.2f}".format(monthly_net|abs) }}
+        </strong> 
+        overall.
+    </p>
+</div>
+
+<!-- 3. Customer Wise Report Section -->
+{% elif report_type == 'customer' %}
+<div class="table-container" style="padding: 24px; margin-bottom: 24px;">
+    <span class="table-title" style="margin-bottom: 16px; display: block;">Select Audit Target Member</span>
+    <form method="GET" action="{{ url_for('reports.reports') }}" style="display: flex; gap: 12px; align-items: center; max-width: 600px;">
+        <input type="hidden" name="type" value="customer">
+        <select id="customer_id" name="customer_id" class="form-control" required style="flex: 1;">
+            <option value="" disabled selected>-- Choose Bank Member --</option>
+            {% for customer in customers %}
+                <option value="{{ customer.id }}" {% if selected_customer and selected_customer.id == customer.id %}selected{% endif %}>
+                    {{ customer.full_name }} (ID: {{ customer.citizenship_id }})
+                </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">
+            <span class="material-symbols-rounded">search</span>
+            Search Profile
+        </button>
+    </form>
+</div>
+
+{% if selected_customer %}
+    <!-- Split Layout for Member Profile Info -->
+    <div style="display: flex; gap: 30px; flex-wrap: wrap; margin-bottom: 24px;">
+        <!-- Member Profile Info (Left) -->
+        <div class="form-card" style="flex: 1; max-width: 500px; padding: 24px;">
+            <h3 style="color: #fff; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                Member Demographic Profile
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <p><strong style="color: var(--text-secondary);">Full Name:</strong> <span style="color: #fff; font-weight: 600;">{{ selected_customer.full_name }}</span></p>
+                <p><strong style="color: var(--text-secondary);">Address:</strong> <span style="color: #fff;">{{ selected_customer.address }}</span></p>
+                <p><strong style="color: var(--text-secondary);">Phone Number:</strong> <span style="color: #fff;">{{ selected_customer.phone_number }}</span></p>
+                <p><strong style="color: var(--text-secondary);">Citizenship ID Card:</strong> <span style="color: #fff;">{{ selected_customer.citizenship_id }}</span></p>
+                <p><strong style="color: var(--text-secondary);">Registration Date:</strong> <span style="color: #fff;">{{ selected_customer.created_at.strftime('%Y-%m-%d') }}</span></p>
+                <p>
+                    <strong style="color: var(--text-secondary);">Status:</strong> 
+                    <span class="badge {% if selected_customer.status == 'active' %}badge-success{% else %}badge-danger{% endif %}">
+                        {{ selected_customer.status }}
+                    </span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Accounts Overview (Right) -->
+        <div class="form-card" style="flex: 1.2; padding: 24px;">
+            <h3 style="color: #fff; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                Financial Accounts
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                {% for acc in selected_customer.accounts %}
+                    <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; background-color: rgba(255, 255, 255, 0.01);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong style="color: #fff; font-size: 1.1rem; font-family: monospace;">#{{ acc.account_number }}</strong>
+                            <span class="badge {% if acc.status == 'active' %}badge-success{% else %}badge-danger{% endif %}">{{ acc.status }}</span>
+                        </div>
+                        <p style="color: var(--text-secondary); margin-bottom: 6px;">
+                            Account Class: <span style="text-transform: capitalize; color: #fff; font-weight: 500;">{{ acc.account_type }}</span>
+                        </p>
+                        <p style="color: var(--text-secondary);">
+                            Current Available Balance: <strong style="color: var(--success); font-size: 1.2rem;">${{ "{:,.2f}".format(acc.balance) }}</strong>
+                        </p>
+                    </div>
+                {% else %}
+                    <p style="color: var(--text-muted); font-style: italic;">No bank accounts associated with this profile.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Active/Past Loans Summary -->
+    <div class="table-container" style="margin-bottom: 24px;">
+        <div class="table-header-bar">
+            <span class="table-title">Loan Contracts Summary</span>
+        </div>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Loan ID</th>
+                    <th>Date</th>
+                    <th>Principal</th>
+                    <th>EMI</th>
+                    <th>Outstanding</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if customer_loans %}
+                    {% for loan in customer_loans %}
+                        <tr>
+                            <td><code style="font-family: monospace;">{{ loan.loan_number }}</code></td>
+                            <td>{{ loan.applied_date.strftime('%Y-%m-%d') }}</td>
+                            <td style="color: #fff; font-weight: 600;">${{ "{:,.2f}".format(loan.amount) }}</td>
+                            <td>${{ "{:,.2f}".format(loan.emi) }}/mo</td>
+                            <td style="color: var(--warning); font-weight: 600;">
+                                ${{ "{:,.2f}".format(loan.total_payable - loan.total_paid) }}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if loan.status == 'pending' %}badge-warning
+                                    {% elif loan.status == 'approved' %}badge-info
+                                    {% elif loan.status == 'rejected' %}badge-danger
+                                    {% elif loan.status == 'fully_paid' %}badge-success
+                                    {% endif %}">
+                                    {{ loan.status.replace('_', ' ') }}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            No historical loans associated with this member.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Full Audit Ledger -->
+    <div class="table-container">
+        <div class="table-header-bar">
+            <span class="table-title">Account Ledger Audit Trail</span>
+        </div>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Txn ID</th>
+                    <th>Timestamp</th>
+                    <th>Account</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Balance After</th>
+                    <th>Memo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if customer_txns %}
+                    {% for txn in customer_txns %}
+                        <tr>
+                            <td><code style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">{{ txn.transaction_uuid }}</code></td>
+                            <td>{{ txn.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td><code style="font-family: monospace;">{{ txn.account.account_number }}</code></td>
+                            <td><span class="badge {% if txn.type == 'deposit' %}badge-success{% else %}badge-danger{% endif %}">{{ txn.type }}</span></td>
+                            <td style="font-weight: 700; {% if txn.type == 'deposit' %}color: var(--success);{% else %}color: var(--danger);{% endif %}">
+                                {% if txn.type == 'deposit' %}+{% else %}-{% endif %}${{ "{:,.2f}".format(txn.amount) }}
+                            </td>
+                            <td style="font-weight: 600; color: #fff;">${{ "{:,.2f}".format(txn.balance_after) }}</td>
+                            <td>{{ txn.description or '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            No transactions recorded on this member's accounts.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    {% if report_type == 'customer' %}
+        <div class="table-container" style="text-align: center; padding: 40px; color: var(--text-muted);">
+            <span class="material-symbols-rounded" style="font-size: 3rem; display: block; margin-bottom: 12px;">search_off</span>
+            Please select a cooperative member from the dropdown menu above to query their financial records.
+        </div>
+    {% endif %}
+{% endif %}
+
+{% endif %}
+{% endblock %}

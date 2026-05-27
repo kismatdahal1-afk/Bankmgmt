@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction Ledger{% endblock %}
+{% block page_title %}Transaction Ledger{% endblock %}
+{% block page_subtitle %}Audit and view all financial deposits and withdrawals{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 10px;">
+    <a href="{{ url_for('transaction.deposit') }}" class="btn btn-success">
+        <span class="material-symbols-rounded">add_circle</span>
+        Deposit Funds
+    </a>
+    <a href="{{ url_for('transaction.withdraw') }}" class="btn btn-danger">
+        <span class="material-symbols-rounded">remove_circle</span>
+        Withdraw Funds
+    </a>
+</div>
+
+<div class="table-container">
+    <div class="table-header-bar">
+        <span class="table-title">System Transactions Ledger</span>
+        <span style="font-size: 0.85rem; color: var(--text-secondary);">Total Recorded Transactions: {{ transactions|length }}</span>
+    </div>
+    
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>Txn ID</th>
+                <th>Timestamp</th>
+                <th>Customer / Acc</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Balance After</th>
+                <th>Memo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if transactions %}
+                {% for txn in transactions %}
+                    <tr>
+                        <td><code style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">{{ txn.transaction_uuid }}</code></td>
+                        <td>{{ txn.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 600; color: #fff;">{{ txn.account.customer.full_name }}</span>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Acc: {{ txn.account.account_number }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {% if txn.type == 'deposit' %}badge-success{% else %}badge-danger{% endif %}">
+                                {{ txn.type }}
+                            </span>
+                        </td>
+                        <td class="{% if txn.type == 'deposit' %}text-success{% else %}text-danger{% endif %}" style="font-weight: 700;">
+                            {% if txn.type == 'deposit' %}+{% else %}-{% endif %}${{ "{:,.2f}".format(txn.amount) }}
+                        </td>
+                        <td style="font-weight: 600; color: #fff;">
+                            ${{ "{:,.2f}".format(txn.balance_after) }}
+                        </td>
+                        <td style="font-size: 0.9rem; color: var(--text-secondary);">
+                            {{ txn.description or '—' }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <span class="material-symbols-rounded" style="font-size: 3rem; display: block; margin-bottom: 12px;">account_balance_wallet</span>
+                        No transactions recorded in the ledger yet.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
