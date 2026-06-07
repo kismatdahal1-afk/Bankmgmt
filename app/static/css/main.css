@@ -456,6 +456,10 @@ body {
     border-radius: 6px;
 }
 
+/* Text Colors */
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+
 /* Flash Messages */
 .flash-container {
     width: 100%;
