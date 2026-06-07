@@ -63,13 +63,13 @@ export default function AdminCustomers() {
                   </td>
                   <td>
                     {activeAccount ? (
-                      <span className={`badge ${activeAccount.account_type === 'savings' ? 'badge-success' : 'badge-info'}`}>
-                        {activeAccount.account_type}
+                      <span className={`badge ${activeAccount.account_type === 'savings' ? 'badge-success' : activeAccount.account_type === 'fixed_deposit' ? 'badge-warning' : 'badge-info'}`}>
+                        {activeAccount.account_type === 'fixed_deposit' ? 'Fixed Deposit' : activeAccount.account_type}
                       </span>
                     ) : '—'}
                   </td>
                   <td style={{ fontWeight: 700, color: '#fff' }}>
-                    {activeAccount ? formatCurrency(activeAccount.balance) : '$0.00'}
+                    {activeAccount ? formatCurrency(activeAccount.balance) : 'NPR 0.00'}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: '8px' }}>

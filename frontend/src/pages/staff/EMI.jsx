@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { formatCurrency, calculateProgress } from '../../utils/helpers'
+import { formatCurrency, calculateProgress, formatDate } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
 
 export default function StaffEMI() {
   const [loans, setLoans] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedLoan, setSelectedLoan] = useState(null)
 
   useEffect(() => {
     fetch('/api/loans/')
@@ -13,7 +14,57 @@ export default function StaffEMI() {
       .catch(() => setLoading(false))
   }, [])
 
-  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid')
+  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid' || l.is_overdue)
+  const activeCount = emiLoans.filter(l => l.status === 'approved' && !l.is_overdue).length
+  const overdueCount = emiLoans.filter(l => l.is_overdue).length
+
+  if (selectedLoan) {
+    const loan = selectedLoan
+    const paid = parseFloat(loan.total_paid)
+    const total = parseFloat(loan.total_payable)
+    const progress = calculateProgress(paid, total)
+    return (
+      <>
+        <div className="top-header">
+          <div className="header-title">
+            <h1>EMI Details &mdash; {loan.loan_number}</h1>
+            <p>Detailed repayment schedule for {loan.customer?.full_name}</p>
+          </div>
+        </div>
+        <button onClick={() => setSelectedLoan(null)} className="btn btn-secondary" style={{ marginBottom: '12px' }}>
+          <span className="material-symbols-rounded">arrow_back</span> Back to EMI Overview
+        </button>
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          <div className="card-stat"><div className="stat-title">Principal</div><div className="stat-value">{formatCurrency(loan.amount)}</div></div>
+          <div className="card-stat"><div className="stat-title">EMI</div><div className="stat-value">{formatCurrency(loan.emi)}/mo</div></div>
+          <div className="card-stat"><div className="stat-title">Paid</div><div className="stat-value" style={{ color: 'var(--success)' }}>{formatCurrency(paid)}</div></div>
+          <div className="card-stat"><div className="stat-title">Remaining</div><div className="stat-value" style={{ color: 'var(--warning)' }}>{formatCurrency(Math.max(0, total - paid))}</div></div>
+          <div className="card-stat"><div className="stat-title">EMIs Left</div><div className="stat-value">{loan.remaining_emis || 0}</div></div>
+        </div>
+        <div className="table-container">
+          <div className="table-header-bar">
+            <span className="table-title">Repayment History</span>
+            <span>{loan.repayments?.length || 0} payments</span>
+          </div>
+          <table className="custom-table">
+            <thead><tr><th>EMI #</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody>
+              {loan.repayments?.length > 0 ? loan.repayments.map(r => (
+                <tr key={r.id}>
+                  <td><code>EMI-{r.emi_number || '—'}</code></td>
+                  <td style={{ fontWeight: 600 }}>{formatCurrency(r.amount)}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{formatDate(r.repayment_date)}</td>
+                  <td><StatusBadge status={r.status || 'paid'} /></td>
+                </tr>
+              )) : (
+                <tr><td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No repayments recorded yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -24,41 +75,53 @@ export default function StaffEMI() {
         </div>
       </div>
 
+      <div className="grid-stats" style={{ marginBottom: '10px' }}>
+        <div className={`card-stat`}><span className="stat-title">Active Loans</span><span className="stat-value">{activeCount}</span><span className="stat-sub">On-time payments</span></div>
+        <div className={`card-stat stat-danger`}><span className="stat-title">Overdue</span><span className="stat-value" style={{ color: 'var(--danger)' }}>{overdueCount}</span><span className="stat-sub">Require attention</span></div>
+      </div>
+
       <div className="table-container">
         <div className="table-header-bar">
           <span className="table-title">EMI Schedule Overview</span>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Active Loans: {emiLoans.filter(l => l.status === 'approved').length}</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{activeCount} active &middot; {overdueCount} overdue</span>
         </div>
         <table className="custom-table">
           <thead>
-            <tr><th>Loan ID</th><th>Customer</th><th>Principal</th><th>EMI</th><th>Total Paid</th><th>Remaining</th><th>Progress</th><th>Status</th></tr>
+            <tr><th>Loan ID</th><th>Customer</th><th>Principal</th><th>EMI</th><th>Paid</th><th>Remaining</th><th>EMIs Left</th><th>Progress</th><th>Status</th><th>Action</th></tr>
           </thead>
           <tbody>
             {emiLoans.length > 0 ? emiLoans.map(loan => {
               const paid = parseFloat(loan.total_paid)
               const total = parseFloat(loan.total_payable)
               const progress = calculateProgress(paid, total)
+              const status = loan.is_overdue ? 'overdue' : loan.status
               return (
-                <tr key={loan.id}>
+                <tr key={loan.id} style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
                   <td><code style={{ fontFamily: 'monospace' }}>{loan.loan_number}</code></td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{loan.customer?.full_name}</td>
                   <td style={{ fontWeight: 600 }}>{formatCurrency(loan.amount)}</td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan.emi)}/mo</td>
                   <td style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(paid)}</td>
                   <td style={{ color: 'var(--warning)', fontWeight: 600 }}>{formatCurrency(Math.max(0, total - paid))}</td>
+                  <td>{loan.remaining_emis || 0}</td>
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '100px' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{progress}%</span>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: 'var(--success)', transition: 'var(--transition)' }} />
+                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: loan.is_overdue ? 'var(--danger)' : 'var(--success)' }} />
                       </div>
                     </div>
                   </td>
-                  <td><StatusBadge status={loan.status} /></td>
+                  <td><StatusBadge status={status} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button onClick={() => setSelectedLoan(loan)} className="btn btn-sm" style={{ padding: '4px 10px' }}>
+                      <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>visibility</span>
+                    </button>
+                  </td>
                 </tr>
               )
             }) : (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No active loans with EMI schedules found.</td></tr>
+              <tr><td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No active loans with EMI schedules found.</td></tr>
             )}
           </tbody>
         </table>

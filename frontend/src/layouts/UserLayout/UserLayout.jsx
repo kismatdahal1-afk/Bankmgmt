@@ -1,6 +1,7 @@
 import React from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import NotificationBell from '../../components/notifications/NotificationBell'
 
 export default function UserLayout() {
   const { customer, customerLogout } = useAuth()
@@ -70,6 +71,9 @@ export default function UserLayout() {
       </aside>
 
       <main className="main-content">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
+          <NotificationBell />
+        </div>
         <Outlet />
       </main>
     </div>

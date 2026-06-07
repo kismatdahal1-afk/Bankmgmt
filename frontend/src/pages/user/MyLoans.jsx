@@ -13,6 +13,8 @@ export default function UserMyLoans() {
       .catch(() => setLoading(false))
   }, [])
 
+  const overdueCount = (loans || []).filter(l => l.is_overdue).length
+
   return (
     <>
       <div className="page-header">
@@ -21,6 +23,13 @@ export default function UserMyLoans() {
           <div className="page-subtitle">Track active loans, repayments and history.</div>
         </div>
       </div>
+
+      {overdueCount > 0 && (
+        <div className="badge badge-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '0.9rem', textTransform: 'none', letterSpacing: '0', fontWeight: 500, width: 'fit-content' }}>
+          <span className="material-symbols-rounded">warning</span>
+          {overdueCount} loan{overdueCount > 1 ? 's' : ''} overdue
+        </div>
+      )}
 
       {loading ? (
         <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>

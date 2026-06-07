@@ -4,9 +4,10 @@ import StatusBadge from '../common/StatusBadge'
 
 export default function LoanCard({ loan }) {
   const progress = calculateProgress(parseFloat(loan.total_paid), parseFloat(loan.total_payable))
+  const status = loan.is_overdue ? 'overdue' : loan.status
 
   return (
-    <div className="loan-card">
+    <div className="loan-card" style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
       <div className="loan-head">
         <div>
           <div className="loan-num">{loan.loan_number}</div>
@@ -14,7 +15,7 @@ export default function LoanCard({ loan }) {
             Principal &middot; {formatCurrency(loan.amount)}
           </div>
         </div>
-        <StatusBadge status={loan.status} />
+        <StatusBadge status={status} />
       </div>
 
       <div className="loan-grid">
@@ -39,7 +40,7 @@ export default function LoanCard({ loan }) {
             <span><strong>{progress}%</strong></span>
           </div>
           <div className="progress">
-            <div className={`progress-bar ${loan.status === 'fully_paid' ? 'success' : ''}`} style={{ width: `${progress}%` }} />
+            <div className="progress-bar" style={{ width: `${progress}%`, background: loan.is_overdue ? 'var(--danger)' : '' }} />
           </div>
         </>
       )}

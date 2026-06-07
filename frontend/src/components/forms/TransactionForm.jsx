@@ -15,14 +15,14 @@ export default function TransactionForm({ action, accounts, selectedAccountNum, 
                   value={acc.account_number}
                   selected={selectedAccountNum === acc.account_number}
                 >
-                  {acc.customer?.full_name || 'Unknown'} (Acc: {acc.account_number} - Bal: ${parseFloat(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                  {acc.customer?.full_name || 'Unknown'} (Acc: {acc.account_number} - Bal: {'NPR ' + parseFloat(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })})
                 </option>
               ))}
             </select>
           </div>
 
           <div className="form-group">
-            <label htmlFor="amount">Transaction Amount ($)</label>
+            <label htmlFor="amount">Transaction Amount (NPR)</label>
             <input type="number" id="amount" name="amount" className="form-control"
               step="0.01" min="0.01" required placeholder="0.00"
             />

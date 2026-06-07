@@ -34,7 +34,7 @@ export default function LineChart({ labels, datasets, height = 320 }) {
         ticks: {
           color: '#9ca3af',
           font: { family: 'Plus Jakarta Sans' },
-          callback: (val) => '$' + val.toLocaleString()
+          callback: (val) => 'NPR ' + val.toLocaleString()
         }
       }
     }

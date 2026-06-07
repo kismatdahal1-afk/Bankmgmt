@@ -19,7 +19,7 @@ const BANKING_CATEGORIES = [
   { id: 'account', label: 'Account Report', icon: 'account_balance' },
 ]
 
-export default function AdminReports() {
+export default function StaffReports() {
   const [activeTab, setActiveTab] = useState('legacy')
   const [reportType, setReportType] = useState('daily')
   const [bankingCategory, setBankingCategory] = useState('deposit')

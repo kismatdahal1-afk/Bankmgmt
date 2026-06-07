@@ -25,7 +25,7 @@ export default function LoanForm({ customers, onSubmit }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="amount">Loan Principal Amount ($)</label>
+            <label htmlFor="amount">Loan Principal Amount (NPR)</label>
             <input
               type="number" id="amount" name="amount" className="form-control"
               step="0.01" min="1.00" placeholder="0.00" required

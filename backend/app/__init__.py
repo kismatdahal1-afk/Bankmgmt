@@ -19,6 +19,7 @@ def create_app(config_class=Config):
     from routes.loan_routes import loan_bp
     from routes.dashboard_routes import reports_bp
     from routes.customer_portal_routes import customer_portal_bp
+    from routes.api_routes import api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(customer_bp)
@@ -26,5 +27,6 @@ def create_app(config_class=Config):
     app.register_blueprint(loan_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(customer_portal_bp)
+    app.register_blueprint(api_bp)
 
     return app

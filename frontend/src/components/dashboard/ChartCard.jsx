@@ -18,7 +18,7 @@ export default function ChartCard({ labels, deposits, withdrawals }) {
     labels,
     datasets: [
       {
-        label: 'Deposits ($)',
+        label: 'Deposits (NPR)',
         data: deposits,
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -27,7 +27,7 @@ export default function ChartCard({ labels, deposits, withdrawals }) {
         fill: true
       },
       {
-        label: 'Withdrawals ($)',
+        label: 'Withdrawals (NPR)',
         data: withdrawals,
         borderColor: '#ef4444',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -56,7 +56,7 @@ export default function ChartCard({ labels, deposits, withdrawals }) {
         ticks: {
           color: '#9ca3af',
           font: { family: 'Plus Jakarta Sans' },
-          callback: (val) => '$' + val.toLocaleString()
+          callback: (val) => 'NPR ' + val.toLocaleString()
         }
       }
     }

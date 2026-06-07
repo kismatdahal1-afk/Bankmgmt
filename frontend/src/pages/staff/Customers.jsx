@@ -55,8 +55,8 @@ export default function StaffCustomers() {
                   <td>{customer.citizenship_id}</td>
                   <td>{customer.phone_number}</td>
                   <td>{activeAccount ? <code style={{ fontFamily: 'monospace', fontSize: '1rem', color: 'var(--accent-color)' }}>{activeAccount.account_number}</code> : <span className="badge badge-danger">No Active Account</span>}</td>
-                  <td>{activeAccount ? <span className={`badge ${activeAccount.account_type === 'savings' ? 'badge-success' : 'badge-info'}`}>{activeAccount.account_type}</span> : '—'}</td>
-                  <td style={{ fontWeight: 700, color: '#fff' }}>{activeAccount ? formatCurrency(activeAccount.balance) : '$0.00'}</td>
+                  <td>{activeAccount ? <span className={`badge ${activeAccount.account_type === 'savings' ? 'badge-success' : activeAccount.account_type === 'fixed_deposit' ? 'badge-warning' : 'badge-info'}`}>{activeAccount.account_type === 'fixed_deposit' ? 'Fixed Deposit' : activeAccount.account_type}</span> : '—'}</td>
+                  <td style={{ fontWeight: 700, color: '#fff' }}>{activeAccount ? formatCurrency(activeAccount.balance) : 'NPR 0.00'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: '8px' }}>
                       {activeAccount && (

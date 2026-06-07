@@ -20,6 +20,8 @@ import AdminTransactionForm from '../pages/admin/TransactionForm'
 import AdminReports from '../pages/admin/Reports'
 import AdminStaffManagement from '../pages/admin/StaffManagement'
 import AdminSettings from '../pages/admin/Settings'
+import AdminAuditLogs from '../pages/admin/AdminAuditLogs'
+import StaffReports from '../pages/staff/Reports'
 import StaffDashboard from '../pages/staff/Dashboard'
 import StaffCustomers from '../pages/staff/Customers'
 import StaffCustomerForm from '../pages/staff/CustomerForm'
@@ -31,6 +33,7 @@ import StaffEMI from '../pages/staff/EMI'
 import StaffTransactions from '../pages/staff/Transactions'
 import StaffTransactionForm from '../pages/staff/TransactionForm'
 import UserDashboard from '../pages/user/Dashboard'
+import FirstLoginFlow from '../components/common/FirstLoginFlow'
 import UserMyAccounts from '../pages/user/MyAccounts'
 import UserMyBalance from '../pages/user/MyBalance'
 import UserMyLoans from '../pages/user/MyLoans'
@@ -64,6 +67,7 @@ export default function AppRoutes() {
         <Route path="reports" element={<AdminReports />} />
         <Route path="staff" element={<AdminStaffManagement />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="audit-logs" element={<AdminAuditLogs />} />
       </Route>
       <Route path="/staff" element={<PrivateRoute role="staff"><StaffLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
@@ -79,7 +83,9 @@ export default function AppRoutes() {
         <Route path="transactions" element={<StaffTransactions />} />
         <Route path="transactions/deposit" element={<StaffTransactionForm />} />
         <Route path="transactions/withdraw" element={<StaffTransactionForm />} />
+        <Route path="reports" element={<StaffReports />} />
       </Route>
+      <Route path="/user/first-login" element={<FirstLoginFlow />} />
       <Route path="/user" element={<PrivateRoute role="customer"><UserLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<UserDashboard />} />

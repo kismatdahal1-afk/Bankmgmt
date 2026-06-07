@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
+import StatusBadge from '../../components/common/StatusBadge'
 
 export default function UserTransactions() {
   const [transactions, setTransactions] = useState([])
@@ -28,6 +29,7 @@ export default function UserTransactions() {
               <th>Date</th>
               <th>Account</th>
               <th>Type</th>
+              <th>Status</th>
               <th style={{ textAlign: 'right' }}>Amount</th>
               <th style={{ textAlign: 'right' }}>Balance After</th>
             </tr>
@@ -37,15 +39,8 @@ export default function UserTransactions() {
               <tr key={i}>
                 <td className="text-muted">{formatDateTime(txn.created_at)}</td>
                 <td className="mono">{txn.account?.account_number}</td>
-                <td>
-                  {txn.type === 'deposit' ? (
-                    <span className="badge badge-success"><span className="material-symbols-rounded" style={{ fontSize: '14px' }}>south_west</span> Deposit</span>
-                  ) : txn.type === 'withdrawal' ? (
-                    <span className="badge badge-danger"><span className="material-symbols-rounded" style={{ fontSize: '14px' }}>north_east</span> Withdrawal</span>
-                  ) : (
-                    <span className="badge badge-info">{txn.type}</span>
-                  )}
-                </td>
+                <td><StatusBadge status={txn.type} /></td>
+                <td><StatusBadge status={txn.status || 'successful'} /></td>
                 <td style={{ textAlign: 'right' }} className={txn.type === 'deposit' ? 'amount-pos' : 'amount-neg'}>
                   {txn.type === 'deposit' ? '+' : '\u2212'} {formatCurrency(txn.amount)}
                 </td>
@@ -53,7 +48,7 @@ export default function UserTransactions() {
               </tr>
             )) : (
               <tr>
-                <td colSpan="5">
+                <td colSpan="6">
                   <div className="empty">
                     <span className="material-symbols-rounded">receipt_long</span>
                     <div>No transactions found.</div>

@@ -60,7 +60,7 @@ export default function AdminRepayForm() {
           <form onSubmit={handleSubmit}>
             <h3 style={{ marginBottom: '20px', color: '#fff' }}>Record Payment Details</h3>
             <div className="form-group">
-              <label htmlFor="amount">Repayment Amount ($)</label>
+              <label htmlFor="amount">Repayment Amount (NPR)</label>
               <input type="number" id="amount" name="amount" className="form-control"
                 step="0.01" min="0.01" max={remainingBalance.toFixed(2)}
                 defaultValue={Math.min(parseFloat(loan?.emi || 0), remainingBalance).toFixed(2)} required />

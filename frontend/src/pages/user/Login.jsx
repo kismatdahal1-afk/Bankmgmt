@@ -13,8 +13,12 @@ export default function UserLogin() {
     e.preventDefault()
     setError('')
     try {
-      await login(username, password, 'customer')
-      navigate('/user/dashboard')
+      const result = await login(username, password, 'customer')
+      if (result?.must_change_password) {
+        navigate('/user/first-login')
+      } else {
+        navigate('/user/dashboard')
+      }
     } catch (err) {
       setError(err.message)
     }

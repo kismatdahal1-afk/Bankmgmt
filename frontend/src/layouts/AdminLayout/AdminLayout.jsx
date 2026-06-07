@@ -1,6 +1,7 @@
 import React from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import NotificationBell from '../../components/notifications/NotificationBell'
 
 export default function AdminLayout() {
   const { user, logout } = useAuth()
@@ -28,6 +29,7 @@ export default function AdminLayout() {
           <li><NavLink to="/admin/reports"><span className="material-symbols-rounded">analytics</span>Reports</NavLink></li>
           <li><NavLink to="/admin/staff"><span className="material-symbols-rounded">badge</span>Staff</NavLink></li>
           <li><NavLink to="/admin/settings"><span className="material-symbols-rounded">settings</span>Settings</NavLink></li>
+          <li><NavLink to="/admin/audit-logs"><span className="material-symbols-rounded">monitor_heart</span>Audit Logs</NavLink></li>
         </ul>
         <div className="sidebar-footer">
           <div className="user-info" style={{ justifyContent: 'space-between', width: '100%' }}>
@@ -45,8 +47,9 @@ export default function AdminLayout() {
         </div>
       </aside>
       <main className="main-content">
-        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500, textAlign: 'right', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
-          <span id="current-time"></span>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
+          <NotificationBell />
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }} id="current-time"></span>
         </div>
         <Outlet />
       </main>

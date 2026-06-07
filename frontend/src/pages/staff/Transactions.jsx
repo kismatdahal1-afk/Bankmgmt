@@ -1,17 +1,59 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
+import StatusBadge from '../../components/common/StatusBadge'
 
 export default function StaffTransactions() {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filterType, setFilterType] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
-  useEffect(() => {
-    fetch('/api/transactions/')
-      .then(r => r.json())
-      .then(d => { setTransactions(d.transactions || d); setLoading(false) })
-      .catch(() => setLoading(false))
+  const fetchTransactions = useCallback(async (url = '/api/transactions/') => {
+    setLoading(true)
+    try {
+      const r = await fetch(url)
+      const d = await r.json()
+      setTransactions(d.transactions || d)
+    } catch (e) { console.error(e) }
+    setLoading(false)
   }, [])
+
+  useEffect(() => { fetchTransactions() }, [fetchTransactions])
+
+  const handleFilter = () => {
+    const params = new URLSearchParams()
+    if (filterType) params.set('type', filterType)
+    if (filterStatus) params.set('status', filterStatus)
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    fetchTransactions(`/api/transactions/filter?${params.toString()}`)
+  }
+
+  const handleReset = () => {
+    setFilterType('')
+    setFilterStatus('')
+    setDateFrom('')
+    setDateTo('')
+    fetchTransactions('/api/transactions/')
+  }
+
+  const exportCSV = () => {
+    const headers = ['Txn ID', 'Date', 'Customer', 'Account', 'Type', 'Amount', 'Balance After', 'Description', 'Status', 'Reference']
+    const rows = transactions.map(t => [
+      t.transaction_uuid, t.created_at, t.account?.customer?.full_name || '',
+      t.account?.account_number || '', t.type, t.amount, t.balance_after,
+      (t.description || '').replace(/,/g, ';'), t.status || 'successful', t.reference_number || ''
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `transactions_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+  }
 
   return (
     <>
@@ -22,44 +64,85 @@ export default function StaffTransactions() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginBottom: '10px' }}>
-        <Link to="/staff/transactions/deposit" className="btn btn-success">
-          <span className="material-symbols-rounded">add_circle</span> Deposit Funds
-        </Link>
-        <Link to="/staff/transactions/withdraw" className="btn btn-danger">
-          <span className="material-symbols-rounded">remove_circle</span> Withdraw Funds
-        </Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Type</label>
+            <select value={filterType} onChange={e => setFilterType(e.target.value)} className="form-control" style={{ padding: '4px 8px', fontSize: '0.85rem' }}>
+              <option value="">All Types</option>
+              <option value="deposit">Deposit</option>
+              <option value="withdrawal">Withdrawal</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</label>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="form-control" style={{ padding: '4px 8px', fontSize: '0.85rem' }}>
+              <option value="">All Status</option>
+              <option value="successful">Successful</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+              <option value="reversed">Reversed</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ margin: 0, minWidth: '130px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>From</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-control" style={{ padding: '4px 8px', fontSize: '0.85rem' }} />
+          </div>
+          <div className="form-group" style={{ margin: 0, minWidth: '130px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>To</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '4px 8px', fontSize: '0.85rem' }} />
+          </div>
+          <button onClick={handleFilter} className="btn btn-sm" style={{ padding: '4px 12px', fontSize: '0.85rem', height: '32px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>filter_alt</span> Filter
+          </button>
+          <button onClick={handleReset} className="btn btn-sm btn-secondary" style={{ padding: '4px 12px', fontSize: '0.85rem', height: '32px' }}>Reset</button>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={exportCSV} className="btn btn-sm" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', padding: '6px 14px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>file_download</span> Export CSV
+          </button>
+          <Link to="/staff/transactions/deposit" className="btn btn-success btn-sm">
+            <span className="material-symbols-rounded">add_circle</span> Deposit
+          </Link>
+          <Link to="/staff/transactions/withdraw" className="btn btn-danger btn-sm">
+            <span className="material-symbols-rounded">remove_circle</span> Withdraw
+          </Link>
+        </div>
       </div>
 
       <div className="table-container">
         <div className="table-header-bar">
           <span className="table-title">System Transactions Ledger</span>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total: {transactions.length}</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{transactions.length} transactions</span>
         </div>
         <table className="custom-table">
           <thead>
-            <tr><th>Txn ID</th><th>Timestamp</th><th>Customer / Acc</th><th>Type</th><th>Amount</th><th>Balance After</th><th>Memo</th></tr>
+            <tr><th>Txn ID</th><th>Timestamp</th><th>Customer / Acc</th><th>Type</th><th>Status</th><th>Amount</th><th>Balance After</th><th>Memo</th></tr>
           </thead>
           <tbody>
             {transactions.length > 0 ? transactions.map(txn => (
               <tr key={txn.id}>
-                <td><code style={{ fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{txn.transaction_uuid}</code></td>
-                <td>{formatDateTime(txn.created_at)}</td>
+                <td><code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{txn.transaction_uuid}</code></td>
+                <td style={{ fontSize: '0.85rem' }}>{formatDateTime(txn.created_at)}</td>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 600, color: '#fff' }}>{txn.account?.customer?.full_name}</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Acc: {txn.account?.account_number}</span>
+                    <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem' }}>{txn.account?.customer?.full_name}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Acc: {txn.account?.account_number}</span>
                   </div>
                 </td>
-                <td><span className={`badge ${txn.type === 'deposit' ? 'badge-success' : 'badge-danger'}`}>{txn.type}</span></td>
+                <td><StatusBadge status={txn.type} /></td>
+                <td><StatusBadge status={txn.status || 'successful'} /></td>
                 <td className={txn.type === 'deposit' ? 'text-success' : 'text-danger'} style={{ fontWeight: 700 }}>
                   {txn.type === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
                 </td>
                 <td style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(txn.balance_after)}</td>
-                <td style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{txn.description || '—'}</td>
+                <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{txn.description || '—'}</td>
               </tr>
             )) : (
-              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No transactions recorded yet.</td></tr>
+              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '3rem', display: 'block', marginBottom: '12px' }}>account_balance_wallet</span>
+                No transactions found.
+              </td></tr>
             )}
           </tbody>
         </table>

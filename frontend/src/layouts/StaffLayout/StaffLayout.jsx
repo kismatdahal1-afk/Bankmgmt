@@ -1,6 +1,7 @@
 import React from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import NotificationBell from '../../components/notifications/NotificationBell'
 
 export default function StaffLayout() {
   const { user, logout } = useAuth()
@@ -25,6 +26,7 @@ export default function StaffLayout() {
           <li><NavLink to="/staff/transactions"><span className="material-symbols-rounded">payments</span>Transactions</NavLink></li>
           <li><NavLink to="/staff/loans"><span className="material-symbols-rounded">handshake</span>Loans</NavLink></li>
           <li><NavLink to="/staff/emi"><span className="material-symbols-rounded">calendar_month</span>EMI</NavLink></li>
+          <li><NavLink to="/staff/reports"><span className="material-symbols-rounded">analytics</span>Reports</NavLink></li>
         </ul>
         <div className="sidebar-footer">
           <div className="user-info" style={{ justifyContent: 'space-between', width: '100%' }}>
@@ -42,6 +44,9 @@ export default function StaffLayout() {
         </div>
       </aside>
       <main className="main-content">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
+          <NotificationBell />
+        </div>
         <Outlet />
       </main>
     </div>

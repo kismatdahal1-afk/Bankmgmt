@@ -40,11 +40,11 @@ export default function AdminSettings() {
 
             <div className="form-group">
               <label htmlFor="currency">Currency</label>
-              <select id="currency" className="form-control" defaultValue="USD">
+              <select id="currency" className="form-control" defaultValue="NPR">
+                <option value="NPR">NPR - Nepalese Rupee</option>
                 <option value="USD">USD - US Dollar</option>
                 <option value="EUR">EUR - Euro</option>
                 <option value="GBP">GBP - British Pound</option>
-                <option value="NPR">NPR - Nepalese Rupee</option>
               </select>
             </div>
 

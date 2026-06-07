@@ -29,8 +29,11 @@ export function AuthProvider({ children }) {
       if (portal === 'customer') {
         sessionStorage.setItem('customer_id', data.customer_id)
         sessionStorage.setItem('customer_name', data.customer_name)
-        setCustomer({ id: data.customer_id, name: data.customer_name })
-        return { role: 'customer' }
+        sessionStorage.setItem('must_change_password', data.must_change_password ? 'true' : 'false')
+        sessionStorage.setItem('customer_phone', data.phone_number || '')
+        sessionStorage.setItem('customer_email', data.email || '')
+        setCustomer({ id: data.customer_id, name: data.customer_name, phone_number: data.phone_number, email: data.email })
+        return { role: 'customer', must_change_password: data.must_change_password }
       }
       sessionStorage.setItem('user_id', data.user_id)
       sessionStorage.setItem('username', data.username)
@@ -60,8 +63,24 @@ export function AuthProvider({ children }) {
     setCustomer(null)
   }
 
+  const refreshCustomer = async () => {
+    try {
+      const res = await api.get('/customer/profile')
+      const data = res.data
+      if (data.customer) {
+        const c = data.customer
+        sessionStorage.setItem('customer_id', c.id)
+        sessionStorage.setItem('customer_name', c.full_name)
+        sessionStorage.setItem('must_change_password', c.must_change_password ? 'true' : 'false')
+        sessionStorage.setItem('customer_phone', c.phone_number || '')
+        sessionStorage.setItem('customer_email', c.email || '')
+        setCustomer({ id: c.id, name: c.full_name, phone_number: c.phone_number, email: c.email })
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, customer, loading, login, logout, customerLogout }}>
+    <AuthContext.Provider value={{ user, customer, loading, login, logout, customerLogout, refreshCustomer }}>
       {children}
     </AuthContext.Provider>
   )

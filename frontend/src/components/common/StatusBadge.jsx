@@ -12,9 +12,18 @@ const badgeClassMap = {
   'withdrawal': 'badge-danger',
   'savings': 'badge-success',
   'current': 'badge-info',
+  'fixed_deposit': 'badge-warning',
   'inactive': 'badge-muted',
   'closed': 'badge-muted',
-  'suspended': 'badge-warning'
+  'suspended': 'badge-warning',
+  'frozen': 'badge-danger',
+  'successful': 'badge-success',
+  'failed': 'badge-danger',
+  'reversed': 'badge-warning',
+  'transfer': 'badge-info',
+  'loan_disbursement': 'badge-info',
+  'emi_payment': 'badge-success',
+  'interest_collection': 'badge-warning'
 }
 
 export default function StatusBadge({ status, children }) {

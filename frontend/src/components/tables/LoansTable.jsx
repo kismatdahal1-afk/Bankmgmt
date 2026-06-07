@@ -6,7 +6,7 @@ export default function LoansTable({ loans, onApprove, onReject, onRepay, userRo
   return (
     <div className="table-container">
       <div className="table-header-bar">
-        <span className="table-title">Loan Contracts ledger</span>
+        <span className="table-title">Loan Contracts Ledger</span>
         <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total Contracts: {loans?.length || 0}</span>
       </div>
       <table className="custom-table">
@@ -26,8 +26,9 @@ export default function LoansTable({ loans, onApprove, onReject, onRepay, userRo
           {loans?.length > 0 ? loans.map(loan => {
             const progress = calculateProgress(parseFloat(loan.total_paid), parseFloat(loan.total_payable))
             const activeAccount = loan.customer?.accounts?.find(a => a.status === 'active')
+            const status = loan.is_overdue ? 'overdue' : loan.status
             return (
-              <tr key={loan.id}>
+              <tr key={loan.id} style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <code style={{ fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{loan.loan_number}</code>
@@ -52,15 +53,18 @@ export default function LoansTable({ loans, onApprove, onReject, onRepay, userRo
                 <td style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan.emi)}/mo</td>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontWeight: 600, color: '#fff' }}>
+                    <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.85rem' }}>
                       {formatCurrency(loan.total_paid)} / {formatCurrency(loan.total_payable)}
+                      {loan.remaining_emis > 0 && (
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 400, fontSize: '0.75rem' }}> ({loan.remaining_emis} EMIs)</span>
+                      )}
                     </span>
                     <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ width: `${progress}%`, height: '100%', backgroundColor: 'var(--success)', transition: 'var(--transition)' }} />
+                      <div style={{ width: `${progress}%`, height: '100%', backgroundColor: loan.is_overdue ? 'var(--danger)' : 'var(--success)', transition: 'var(--transition)' }} />
                     </div>
                   </div>
                 </td>
-                <td><StatusBadge status={loan.status} /></td>
+                <td><StatusBadge status={status} /></td>
                 <td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'inline-flex', gap: '8px' }}>
                     {loan.status === 'pending' && userRole === 'admin' && (
