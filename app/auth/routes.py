@@ -38,6 +38,8 @@ def load_logged_in_user():
         g.user = None
     else:
         g.user = db.session.get(User, user_id)
+        if g.user is None:
+            session.clear()
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -46,8 +48,8 @@ def login():
         return redirect(url_for('reports.dashboard'))
 
     if request.method == 'POST':
-        username = request.form.get('username').strip()
-        password = request.form.get('password')
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password', '')
 
         user = User.query.filter_by(username=username).first()
 
@@ -61,7 +63,7 @@ def login():
             flash(f'Welcome back, {user.username}! Session authenticated.', 'success')
             return redirect(url_for('reports.dashboard'))
         else:
-            flash('Invalid username or security password.', 'danger')
+            flash('Invalid username or password.', 'danger')
 
     return render_template('login.html')
 

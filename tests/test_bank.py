@@ -1,14 +1,14 @@
 import unittest
+from decimal import Decimal
 from app import create_app
 from app.database import db
-from app.models import User, Customer, Account, Loan
+from app.models import User, Customer, Account
 from app.config import Config
 from app.loan.routes import calculate_emi_and_payable
 
 class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:' # Use in-memory database for testing
-    WTF_CSRF_ENABLED = False
 
 class VillageBankTestCase(unittest.TestCase):
     def setUp(self):
@@ -45,11 +45,11 @@ class VillageBankTestCase(unittest.TestCase):
     def test_emi_calculation(self):
         """Test that standard EMI calculator yields accurate figures."""
         # Principal: $10,000, 12% Annual Rate, 12 Months duration
-        emi, total_payable = calculate_emi_and_payable(10000, 12.00, 12)
+        emi, total_payable = calculate_emi_and_payable(Decimal('10000'), Decimal('12.00'), 12)
         # Expected EMI should be around $888.49
         # Expected Total Payable should be around $10661.85
-        self.assertAlmostEqual(emi, 888.49, places=1)
-        self.assertAlmostEqual(total_payable, 10661.85, places=1)
+        self.assertAlmostEqual(float(emi), 888.49, places=2)
+        self.assertAlmostEqual(float(total_payable), 10661.85, places=2)
 
     def test_customer_and_account_creation(self):
         """Test customer registration and linkage to account."""
@@ -66,7 +66,7 @@ class VillageBankTestCase(unittest.TestCase):
             customer_id=customer.id,
             account_number="2000000001",
             account_type="savings",
-            balance=500.00
+            balance=Decimal('500.00')
         )
         db.session.add(account)
         db.session.commit()

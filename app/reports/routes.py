@@ -1,5 +1,6 @@
 import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from decimal import Decimal
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session
 from app.database import db
 from app.models import Customer, Account, Transaction, Loan, Repayment
 from app.auth.routes import login_required
@@ -8,7 +9,9 @@ reports_bp = Blueprint('reports', __name__)
 
 @reports_bp.route('/')
 def index():
-    return redirect(url_for('reports.dashboard'))
+    if session.get('user_id'):
+        return redirect(url_for('reports.dashboard'))
+    return render_template('landing.html')
 
 @reports_bp.route('/dashboard')
 @login_required
@@ -18,29 +21,28 @@ def dashboard():
 
     # 2. Total Current Deposits (Sum of active account balances)
     total_deposits_balance = db.session.query(db.func.sum(Account.balance))\
-        .filter(Account.status == 'active').scalar() or 0.00
+        .filter(Account.status == 'active').scalar() or Decimal('0.00')
 
     # 3. Total Transaction Volume Metrics (Historical deposits/withdrawals)
     total_deposits_volume = db.session.query(db.func.sum(Transaction.amount))\
-        .filter(Transaction.type == 'deposit').scalar() or 0.00
+        .filter(Transaction.type == 'deposit').scalar() or Decimal('0.00')
     
     total_withdrawals_volume = db.session.query(db.func.sum(Transaction.amount))\
-        .filter(Transaction.type == 'withdrawal').scalar() or 0.00
-
-    # FIX: Convert Decimal to float to avoid type errors when adding
-    total_deposits_volume = float(total_deposits_volume)
-    total_withdrawals_volume = float(total_withdrawals_volume)
+        .filter(Transaction.type == 'withdrawal').scalar() or Decimal('0.00')
 
     # 4. Active Loans (Approved and not fully paid)
     active_loans_count = Loan.query.filter(Loan.status == 'approved').count()
     total_loan_receivable = db.session.query(db.func.sum(Loan.total_payable - Loan.total_paid))\
-        .filter(Loan.status == 'approved').scalar() or 0.00
+        .filter(Loan.status == 'approved').scalar() or Decimal('0.00')
+
+    # 5. Recent 5 Transactions
+    total_turnover = total_deposits_volume + total_withdrawals_volume
 
     # 5. Recent 5 Transactions
     recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
 
     # 6. Chart Analytics: Deposits vs Withdrawals over the last 7 days
-    today = datetime.datetime.utcnow().date()
+    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
     dates = [today - datetime.timedelta(days=i) for i in range(6, -1, -1)]
     
     date_labels = [d.strftime('%b %d') for d in dates]
@@ -55,13 +57,13 @@ def dashboard():
             Transaction.type == 'deposit',
             Transaction.created_at >= start_datetime,
             Transaction.created_at <= end_datetime
-        ).scalar() or 0.00
+        ).scalar() or Decimal('0.00')
         
         wit = db.session.query(db.func.sum(Transaction.amount)).filter(
             Transaction.type == 'withdrawal',
             Transaction.created_at >= start_datetime,
             Transaction.created_at <= end_datetime
-        ).scalar() or 0.00
+        ).scalar() or Decimal('0.00')
 
         daily_deposits.append(float(dep))
         daily_withdrawals.append(float(wit))
@@ -74,6 +76,7 @@ def dashboard():
         total_withdrawals_volume=total_withdrawals_volume,
         active_loans_count=active_loans_count,
         total_loan_receivable=total_loan_receivable,
+        total_turnover=total_turnover,
         recent_transactions=recent_transactions,
         date_labels=date_labels,
         daily_deposits=daily_deposits,
@@ -84,7 +87,7 @@ def dashboard():
 @login_required
 def reports():
     report_type = request.args.get('type', 'daily')
-    today = datetime.datetime.utcnow().date()
+    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
 
     # Base contexts
     customers = Customer.query.filter_by(status='active').order_by(Customer.full_name).all()
@@ -92,7 +95,7 @@ def reports():
     # 1. Daily Report
     daily_transactions = []
     daily_repayments = []
-    daily_summary = {'deposits': 0.00, 'withdrawals': 0.00, 'repayments': 0.00}
+    daily_summary = {'deposits': Decimal('0.00'), 'withdrawals': Decimal('0.00'), 'repayments': Decimal('0.00')}
     
     if report_type == 'daily':
         start = datetime.datetime.combine(today, datetime.time.min)
@@ -108,12 +111,12 @@ def reports():
             Repayment.repayment_date <= end
         ).all()
 
-        daily_summary['deposits'] = sum(float(t.amount) for t in daily_transactions if t.type == 'deposit')
-        daily_summary['withdrawals'] = sum(float(t.amount) for t in daily_transactions if t.type == 'withdrawal')
-        daily_summary['repayments'] = sum(float(r.amount) for r in daily_repayments)
+        daily_summary['deposits'] = sum((t.amount for t in daily_transactions if t.type == 'deposit'), Decimal('0.00'))
+        daily_summary['withdrawals'] = sum((t.amount for t in daily_transactions if t.type == 'withdrawal'), Decimal('0.00'))
+        daily_summary['repayments'] = sum((r.amount for r in daily_repayments), Decimal('0.00'))
 
     # 2. Monthly Report
-    monthly_summary = {'deposits': 0.00, 'withdrawals': 0.00, 'repayments': 0.00}
+    monthly_summary = {'deposits': Decimal('0.00'), 'withdrawals': Decimal('0.00'), 'repayments': Decimal('0.00')}
     monthly_transactions_count = 0
     
     if report_type == 'monthly':
@@ -133,9 +136,9 @@ def reports():
             Repayment.repayment_date <= end_of_month
         ).all()
 
-        monthly_summary['deposits'] = sum(float(t.amount) for t in monthly_txns if t.type == 'deposit')
-        monthly_summary['withdrawals'] = sum(float(t.amount) for t in monthly_txns if t.type == 'withdrawal')
-        monthly_summary['repayments'] = sum(float(r.amount) for r in monthly_repays)
+        monthly_summary['deposits'] = sum((t.amount for t in monthly_txns if t.type == 'deposit'), Decimal('0.00'))
+        monthly_summary['withdrawals'] = sum((t.amount for t in monthly_txns if t.type == 'withdrawal'), Decimal('0.00'))
+        monthly_summary['repayments'] = sum((r.amount for r in monthly_repays), Decimal('0.00'))
         monthly_transactions_count = len(monthly_txns) + len(monthly_repays)
 
     # 3. Customer-Wise Report
@@ -155,7 +158,7 @@ def reports():
                 customer_loans = Loan.query.filter_by(customer_id=customer_id)\
                     .order_by(Loan.applied_date.desc()).all()
         except ValueError:
-            pass
+            flash("Invalid customer ID entered.", "danger")
 
     return render_template(
         'reports.html',

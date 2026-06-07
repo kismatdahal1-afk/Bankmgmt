@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from app.database import db
 from app.models import Customer, Account, Transaction, Loan, Repayment
@@ -7,18 +8,19 @@ from app.auth.routes import login_required, role_required
 loan_bp = Blueprint('loan', __name__, template_folder='../templates', url_prefix='/loans')
 
 def calculate_emi_and_payable(principal, annual_rate, duration_months):
-    """Calculates EMI and Total Payable based on standard reducing balance EMI formula."""
-    if annual_rate == 0:
-        emi = principal / duration_months
-        total_payable = principal
+    p = Decimal(str(principal))
+    r = Decimal(str(annual_rate))
+    n = duration_months
+
+    if r == 0:
+        emi = p / n
+        total_payable = p
         return round(emi, 2), round(total_payable, 2)
 
-    # Monthly interest rate
-    r = (annual_rate / 12) / 100
-    n = duration_months
+    mr = (r / Decimal('12')) / Decimal('100')
     
-    # EMI = P * r * (1+r)^n / ((1+r)^n - 1)
-    emi = principal * r * ((1 + r) ** n) / (((1 + r) ** n) - 1)
+    one_plus_r_n = (Decimal('1') + mr) ** n
+    emi = p * mr * one_plus_r_n / (one_plus_r_n - Decimal('1'))
     total_payable = emi * n
     return round(emi, 2), round(total_payable, 2)
 
@@ -46,14 +48,14 @@ def apply_loan():
 
         try:
             customer_id = int(customer_id_str)
-            amount = float(amount_str)
-            interest_rate = float(interest_rate_str)
+            amount = Decimal(amount_str)
+            interest_rate = Decimal(interest_rate_str)
             duration_months = int(duration_months_str)
 
             if amount <= 0 or interest_rate < 0 or duration_months <= 0:
                 flash("Invalid input values. Amount, interest rate, and duration must be positive.", "danger")
                 return render_template('loan_form.html', customers=customers)
-        except ValueError:
+        except Exception:
             flash("Invalid numeric input values.", "danger")
             return render_template('loan_form.html', customers=customers)
 
@@ -104,8 +106,8 @@ def approve_loan(loan_id):
     try:
         # Update loan record
         loan.status = 'approved'
-        loan.approved_date = datetime.datetime.utcnow()
-        loan.approved_by = g.user.id
+        loan.approved_date = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        loan.approved_by = g.user.id if g.user else None
 
         # Disburse funds directly into customer account
         active_account.balance += loan.amount
@@ -117,7 +119,7 @@ def approve_loan(loan_id):
             amount=loan.amount,
             balance_after=active_account.balance,
             description=f"Loan Disbursement (Ref: {loan.loan_number})",
-            created_by=g.user.id
+            created_by=g.user.id if g.user else None
         )
         db.session.add(txn)
         db.session.commit()
@@ -167,18 +169,17 @@ def repay_loan(loan_id):
             return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
 
         try:
-            amount = float(amount_str)
+            amount = Decimal(amount_str)
             if amount <= 0:
                 flash("Repayment amount must be greater than zero.", "danger")
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
             
             # Prevent overpayment
-            # Handle float rounding differences by adding a tiny threshold
-            if amount > (remaining_balance + 0.01):
+            if amount > remaining_balance + Decimal('0.01'):
                 flash(f"Repayment amount exceeds remaining loan balance (${remaining_balance:,.2f}).", "danger")
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
 
-        except ValueError:
+        except Exception:
             flash("Invalid numeric repayment amount.", "danger")
             return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
 
@@ -196,8 +197,7 @@ def repay_loan(loan_id):
             loan.total_paid += amount
             
             # If loan paid equals total payable, mark as fully paid
-            # Using minor epsilon 0.05 for floating point comparisons
-            if abs(loan.total_payable - loan.total_paid) < 0.05:
+            if abs(loan.total_payable - loan.total_paid) < Decimal('0.05'):
                 loan.status = 'fully_paid'
                 # set total_paid equal to total_payable to avoid minor fractional diffs in display
                 loan.total_paid = loan.total_payable
@@ -212,7 +212,7 @@ def repay_loan(loan_id):
                     amount=amount,
                     balance_after=active_account.balance,
                     description=f"Loan Repayment (Ref: {loan.loan_number})",
-                    created_by=g.user.id
+                    created_by=g.user.id if g.user else None
                 )
                 db.session.add(txn)
 
@@ -220,7 +220,7 @@ def repay_loan(loan_id):
             repay_record = Repayment(
                 loan_id=loan.id,
                 amount=amount,
-                received_by=g.user.id
+                received_by=g.user.id if g.user else None
             )
             db.session.add(repay_record)
             db.session.commit()

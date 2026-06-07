@@ -1,6 +1,7 @@
 from app import create_app
 from app.database import db
-from app.models import User
+from app.models import User, Customer, Account
+from decimal import Decimal
 
 def init_database():
     app = create_app()
@@ -27,6 +28,45 @@ def init_database():
             db.session.add(staff)
         else:
             print("Staff user already exists.")
+
+        # Seed sample customer with login credentials
+        sample_customer = Customer.query.filter_by(username='john').first()
+        if not sample_customer:
+            print("Seeding sample customer (john/password123)...")
+            customer = Customer(
+                full_name='John Doe',
+                address='14 Garden Lane, Village Kothrud',
+                phone_number='9876543210',
+                citizenship_id='AADHR-1234-5678',
+                username='john',
+                status='active'
+            )
+            customer.set_password('password123')
+            db.session.add(customer)
+            db.session.flush()
+
+            # Create savings account
+            import uuid
+            savings = Account(
+                customer_id=customer.id,
+                account_number=f"SAV-{uuid.uuid4().hex[:8].upper()}",
+                account_type='savings',
+                balance=Decimal('58420.50'),
+                status='active'
+            )
+            db.session.add(savings)
+
+            # Create current account
+            current = Account(
+                customer_id=customer.id,
+                account_number=f"CUR-{uuid.uuid4().hex[:8].upper()}",
+                account_type='current',
+                balance=Decimal('26160.00'),
+                status='active'
+            )
+            db.session.add(current)
+        else:
+            print("Sample customer already exists.")
 
         db.session.commit()
         print("Database initialized and seeded successfully!")

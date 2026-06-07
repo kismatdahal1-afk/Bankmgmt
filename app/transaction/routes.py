@@ -15,10 +15,14 @@ def deposit():
         amount_str = request.form.get('amount')
         description = request.form.get('description', '')
         
+        if not account_number:
+            flash('Account number is required.', 'danger')
+            return redirect(url_for('transaction.deposit'))
+        
         # Convert amount to Decimal
         try:
             amount = Decimal(str(amount_str))
-        except:
+        except Exception:
             flash('Invalid amount', 'danger')
             return redirect(url_for('transaction.deposit'))
         
@@ -42,13 +46,13 @@ def deposit():
         
         # Create transaction record
         transaction = Transaction(
-            transaction_uuid=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+            transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
             account_id=account.id,
             type='deposit',
             amount=amount,
             balance_after=new_balance,
             description=description,
-            created_by=g.user.id
+            created_by=g.user.id if g.user else None
         )
         
         db.session.add(transaction)
@@ -59,7 +63,8 @@ def deposit():
     
     # GET request - show deposit form
     accounts = Account.query.filter_by(status='active').all()
-    return render_template('deposit.html', accounts=accounts)
+    selected_account_num = request.args.get('account_number')
+    return render_template('transaction_form.html', accounts=accounts, selected_account_num=selected_account_num, action='Deposit')
 
 @transaction_bp.route('/transactions/withdraw', methods=['GET', 'POST'])
 @login_required
@@ -69,10 +74,14 @@ def withdraw():
         amount_str = request.form.get('amount')
         description = request.form.get('description', '')
         
+        if not account_number:
+            flash('Account number is required.', 'danger')
+            return redirect(url_for('transaction.withdraw'))
+        
         # Convert amount to Decimal
         try:
             amount = Decimal(str(amount_str))
-        except:
+        except Exception:
             flash('Invalid amount', 'danger')
             return redirect(url_for('transaction.withdraw'))
         
@@ -101,13 +110,13 @@ def withdraw():
         
         # Create transaction record
         transaction = Transaction(
-            transaction_uuid=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+            transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
             account_id=account.id,
             type='withdrawal',
             amount=amount,
             balance_after=new_balance,
             description=description,
-            created_by=g.user.id
+            created_by=g.user.id if g.user else None
         )
         
         db.session.add(transaction)
@@ -118,7 +127,8 @@ def withdraw():
     
     # GET request - show withdraw form
     accounts = Account.query.filter_by(status='active').all()
-    return render_template('withdraw.html', accounts=accounts)
+    selected_account_num = request.args.get('account_number')
+    return render_template('transaction_form.html', accounts=accounts, selected_account_num=selected_account_num, action='Withdraw')
 
 @transaction_bp.route('/transactions/')
 @login_required

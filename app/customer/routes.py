@@ -1,4 +1,5 @@
 import random
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from app.database import db
 from app.models import Customer, Account, Transaction
@@ -27,10 +28,10 @@ def list_customers():
 @login_required
 def create_customer():
     if request.method == 'POST':
-        full_name = request.form.get('full_name').strip()
-        address = request.form.get('address').strip()
-        phone_number = request.form.get('phone_number').strip()
-        citizenship_id = request.form.get('citizenship_id').strip()
+        full_name = (request.form.get('full_name') or '').strip()
+        address = (request.form.get('address') or '').strip()
+        phone_number = (request.form.get('phone_number') or '').strip()
+        citizenship_id = (request.form.get('citizenship_id') or '').strip()
         account_type = request.form.get('account_type')
         initial_balance_str = request.form.get('initial_balance', '0')
 
@@ -49,11 +50,11 @@ def create_customer():
             return render_template('customer_form.html', action="Create")
 
         try:
-            initial_balance = float(initial_balance_str)
+            initial_balance = Decimal(initial_balance_str)
             if initial_balance < 0:
                 flash("Initial balance cannot be negative.", "danger")
                 return render_template('customer_form.html', action="Create")
-        except ValueError:
+        except Exception:
             flash("Invalid initial balance amount.", "danger")
             return render_template('customer_form.html', action="Create")
 
@@ -109,10 +110,10 @@ def edit_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     
     if request.method == 'POST':
-        full_name = request.form.get('full_name').strip()
-        address = request.form.get('address').strip()
-        phone_number = request.form.get('phone_number').strip()
-        citizenship_id = request.form.get('citizenship_id').strip()
+        full_name = (request.form.get('full_name') or '').strip()
+        address = (request.form.get('address') or '').strip()
+        phone_number = (request.form.get('phone_number') or '').strip()
+        citizenship_id = (request.form.get('citizenship_id') or '').strip()
 
         if not all([full_name, address, phone_number, citizenship_id]):
             flash("All fields are required.", "danger")

@@ -19,31 +19,31 @@
                 <h2>Village Bank</h2>
             </div>
             <ul class="sidebar-nav">
-                <li class="{% if request.blueprint == 'reports' and request.endpoint.endswith('.dashboard') %}active{% endif %}">
+                <li class="{% if (request.blueprint or '') == 'reports' and (request.endpoint or '').endswith('.dashboard') %}active{% endif %}">
                     <a href="{{ url_for('reports.dashboard') }}">
                         <span class="material-symbols-rounded">dashboard</span>
                         Dashboard
                     </a>
                 </li>
-                <li class="{% if request.blueprint == 'customer' %}active{% endif %}">
+                <li class="{% if (request.blueprint or '') == 'customer' %}active{% endif %}">
                     <a href="{{ url_for('customer.list_customers') }}">
                         <span class="material-symbols-rounded">group</span>
                         Customers
                     </a>
                 </li>
-                <li class="{% if request.blueprint == 'transaction' %}active{% endif %}">
+                <li class="{% if (request.blueprint or '') == 'transaction' %}active{% endif %}">
                     <a href="{{ url_for('transaction.transactions_list') }}">
                         <span class="material-symbols-rounded">payments</span>
                         Transactions
                     </a>
                 </li>
-                <li class="{% if request.blueprint == 'loan' %}active{% endif %}">
+                <li class="{% if (request.blueprint or '') == 'loan' %}active{% endif %}">
                     <a href="{{ url_for('loan.loans_list') }}">
                         <span class="material-symbols-rounded">handshake</span>
                         Loans
                     </a>
                 </li>
-                <li class="{% if request.blueprint == 'reports' and request.endpoint.endswith('.reports') %}active{% endif %}">
+                <li class="{% if (request.blueprint or '') == 'reports' and (request.endpoint or '').endswith('.reports') %}active{% endif %}">
                     <a href="{{ url_for('reports.reports') }}">
                         <span class="material-symbols-rounded">analytics</span>
                         Reports

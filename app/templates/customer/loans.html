@@ -1,0 +1,70 @@
+{% extends "customer/base.html" %}
+{% block title %}Loans{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">My Loans</div>
+    <div class="page-subtitle">Track active loans, repayments and history.</div>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  {% for loan in loans %}
+    {% set progress = 0 %}
+    {% if loan.total_payable and loan.total_payable > 0 %}
+      {% set progress = (loan.total_paid / loan.total_payable * 100) | round(1) %}
+    {% endif %}
+
+    <div class="loan-card">
+      <div class="loan-head">
+        <div>
+          <div class="loan-num">{{ loan.loan_number }}</div>
+          <div class="text-muted" style="font-size: 12px; margin-top: 2px;">Principal &middot; ${{ "{:,.2f}".format(loan.amount) }}</div>
+        </div>
+        {% if loan.status == 'approved' %}
+          <span class="badge badge-info">Approved</span>
+        {% elif loan.status == 'fully_paid' %}
+          <span class="badge badge-success">Fully Paid</span>
+        {% elif loan.status == 'rejected' %}
+          <span class="badge badge-danger">Rejected</span>
+        {% elif loan.status == 'pending' %}
+          <span class="badge badge-warning">Pending</span>
+        {% else %}
+          <span class="badge badge-muted">{{ loan.status }}</span>
+        {% endif %}
+      </div>
+
+      <div class="loan-grid">
+        <div class="loan-stat">
+          <div class="label">Interest</div>
+          <div class="value">{{ loan.interest_rate }}%</div>
+        </div>
+        <div class="loan-stat">
+          <div class="label">EMI</div>
+          <div class="value">${{ "{:,.2f}".format(loan.emi) }}</div>
+        </div>
+        <div class="loan-stat">
+          <div class="label">Total</div>
+          <div class="value">${{ "{:,.2f}".format(loan.total_payable) }}</div>
+        </div>
+      </div>
+
+      {% if loan.status != 'rejected' and loan.status != 'pending' %}
+      <div class="loan-progress-meta">
+        <span>Repaid ${{ "{:,.2f}".format(loan.total_paid) }} / ${{ "{:,.2f}".format(loan.total_payable) }}</span>
+        <span><strong>{{ progress }}%</strong></span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar {% if loan.status == 'fully_paid' %}success{% endif %}" style="width: {{ progress }}%;"></div>
+      </div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="empty" style="grid-column: 1 / -1;">
+      <span class="material-symbols-rounded">request_quote</span>
+      <div>You don't have any loans on record.</div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -21,7 +21,7 @@
             <div class="form-group">
                 <label for="amount">Repayment Amount ($)</label>
                 <input type="number" id="amount" name="amount" class="form-control" 
-                       step="0.01" min="0.01" max="{{ remaining_balance }}" 
+                       step="0.01" min="0.01" max="{{ '{:.2f}'.format(remaining_balance) }}" 
                        value="{{ '{:.2f}'.format(loan.emi) if loan.emi < remaining_balance else '{:.2f}'.format(remaining_balance) }}" required>
             </div>
 

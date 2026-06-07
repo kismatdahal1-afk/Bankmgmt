@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Village Bank{% endblock %} · Village Bank</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <span class="material-symbols-rounded">account_balance</span>
+        </div>
+        <div>
+          <div class="brand-name">Village Bank</div>
+          <div class="brand-sub">Customer Portal</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="avatar">{{ initials | default('JD') }}</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">{{ customer.full_name | default('John Doe') }}</div>
+          <div class="sidebar-user-role">Customer · #{{ customer.id | default('100234') }}</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="{{ url_for('customer_portal.dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+          <span class="material-symbols-rounded">dashboard</span> Dashboard
+        </a>
+        <a href="{{ url_for('customer_portal.accounts') }}" class="nav-link {% if active_page == 'accounts' %}active{% endif %}">
+          <span class="material-symbols-rounded">account_balance_wallet</span> Accounts
+        </a>
+        <a href="{{ url_for('customer_portal.transactions') }}" class="nav-link {% if active_page == 'transactions' %}active{% endif %}">
+          <span class="material-symbols-rounded">receipt_long</span> Transactions
+        </a>
+        <a href="{{ url_for('customer_portal.loans') }}" class="nav-link {% if active_page == 'loans' %}active{% endif %}">
+          <span class="material-symbols-rounded">request_quote</span> Loans
+        </a>
+        <a href="{{ url_for('customer_portal.profile') }}" class="nav-link {% if active_page == 'profile' %}active{% endif %}">
+          <span class="material-symbols-rounded">person</span> Profile
+        </a>
+        <a href="{{ url_for('customer_portal.logout') }}" class="nav-link" style="margin-top: 12px;">
+          <span class="material-symbols-rounded">logout</span> Logout
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">&copy; {{ current_year | default('2026') }} Village Bank</div>
+    </aside>
+
+    <main class="main-content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="badge badge-{{ 'danger' if category == 'danger' else 'success' if category == 'success' else 'warning' }}" style="margin-bottom: 16px; padding: 10px 14px; display: flex; width: 100%; justify-content: flex-start; text-transform: none; font-weight: 500; font-size: 13px; letter-spacing: 0;">
+              <span class="material-symbols-rounded" style="font-size: 18px; margin-right: 8px;">
+                {% if category == 'danger' %}error{% elif category == 'success' %}check_circle{% else %}info{% endif %}
+              </span>
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

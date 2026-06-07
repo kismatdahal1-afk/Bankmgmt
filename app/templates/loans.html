@@ -71,7 +71,7 @@
                                 <span style="font-weight: 600; color: #fff;">
                                     ${{ "{:,.2f}".format(loan.total_paid) }} / ${{ "{:,.2f}".format(loan.total_payable) }}
                                 </span>
-                                {% set pct = (loan.total_paid / loan.total_payable * 100)|int %}
+                                {% set pct = (loan.total_paid / loan.total_payable * 100)|int if loan.total_payable else 0 %}
                                 <div style="width: 100%; height: 6px; background-color: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
                                     <div style="width: {{ pct }}%; height: 100%; background-color: var(--success); transition: var(--transition);"></div>
                                 </div>

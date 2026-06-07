@@ -1,0 +1,58 @@
+{% extends "customer/base.html" %}
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">My Profile</div>
+    <div class="page-subtitle">Personal and contact information on file.</div>
+  </div>
+</div>
+
+<div class="form-card">
+  <div style="display: flex; align-items: center; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
+    <div class="avatar" style="width: 64px; height: 64px; font-size: 22px;">{{ initials }}</div>
+    <div>
+      <div style="font-size: 20px; font-weight: 700;">{{ customer.full_name }}</div>
+      <div class="text-muted" style="font-size: 13px; margin-top: 2px;">
+        Customer ID &middot; #{{ customer.id }}
+        <span style="margin: 0 8px;">&middot;</span>
+        Member since {{ customer.created_at.strftime('%Y-%m-%d') }}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="form-group">
+      <label class="form-label">Full Name</label>
+      <div class="form-readonly">{{ customer.full_name }}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Phone</label>
+      <div class="form-readonly">{{ customer.phone_number }}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Government ID</label>
+      <div class="form-readonly mono">{{ customer.citizenship_id }}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <div class="form-readonly">{{ customer.username }}</div>
+    </div>
+
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label class="form-label">Address</label>
+      <div class="form-readonly">{{ customer.address }}</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border);">
+    <a href="{{ url_for('customer_portal.logout') }}" class="btn btn-danger">
+      <span class="material-symbols-rounded">logout</span> Sign Out
+    </a>
+  </div>
+</div>
+{% endblock %}

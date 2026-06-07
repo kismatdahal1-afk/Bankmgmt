@@ -1,0 +1,55 @@
+{% extends "customer/base.html" %}
+{% block title %}Transactions{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Transaction History</div>
+    <div class="page-subtitle">Complete ledger of deposits and withdrawals.</div>
+  </div>
+</div>
+
+<div class="table-container">
+  <table class="custom-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Account</th>
+        <th>Type</th>
+        <th style="text-align: right;">Amount</th>
+        <th style="text-align: right;">Balance After</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in transactions %}
+      <tr>
+        <td class="text-muted">{{ t.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="mono">{{ t.account.account_number }}</td>
+        <td>
+          {% if t.type == 'deposit' %}
+            <span class="badge badge-success"><span class="material-symbols-rounded" style="font-size: 14px;">south_west</span> Deposit</span>
+          {% elif t.type == 'withdrawal' %}
+            <span class="badge badge-danger"><span class="material-symbols-rounded" style="font-size: 14px;">north_east</span> Withdrawal</span>
+          {% else %}
+            <span class="badge badge-info">{{ t.type }}</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right;" class="{% if t.type == 'deposit' %}amount-pos{% else %}amount-neg{% endif %}">
+          {% if t.type == 'deposit' %}+{% else %}&minus;{% endif %} ${{ "{:,.2f}".format(t.amount) }}
+        </td>
+        <td style="text-align: right;" class="mono">${{ "{:,.2f}".format(t.balance_after) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5">
+          <div class="empty">
+            <span class="material-symbols-rounded">receipt_long</span>
+            <div>No transactions found.</div>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

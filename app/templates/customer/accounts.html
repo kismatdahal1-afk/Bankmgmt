@@ -1,0 +1,52 @@
+{% extends "customer/base.html" %}
+{% block title %}Accounts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">My Accounts</div>
+    <div class="page-subtitle">All accounts held under your customer profile.</div>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  {% for acc in accounts %}
+    <div class="account-card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div class="account-num">{{ acc.account_number }}</div>
+          <div class="account-balance">${{ "{:,.2f}".format(acc.balance) }}</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end;">
+          {% if acc.account_type == 'savings' %}
+            <span class="badge badge-info"><span class="material-symbols-rounded" style="font-size: 14px;">savings</span> Savings</span>
+          {% else %}
+            <span class="badge badge-warning"><span class="material-symbols-rounded" style="font-size: 14px;">account_balance</span> Current</span>
+          {% endif %}
+          {% if acc.status == 'active' %}
+            <span class="badge badge-success">Active</span>
+          {% elif acc.status == 'suspended' %}
+            <span class="badge badge-warning">Suspended</span>
+          {% elif acc.status == 'closed' %}
+            <span class="badge badge-muted">Closed</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="account-meta">
+        <div class="text-muted" style="font-size: 12px;">
+          <span class="material-symbols-rounded" style="font-size: 14px; vertical-align: -3px;">event</span>
+          Opened {{ acc.created_at.strftime('%Y-%m-%d') }}
+        </div>
+        <a href="{{ url_for('customer_portal.transactions') }}?account={{ acc.account_number }}" class="btn btn-sm">
+          <span class="material-symbols-rounded">receipt_long</span> Statement
+        </a>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty" style="grid-column: 1 / -1;">
+      <span class="material-symbols-rounded">account_balance_wallet</span>
+      <div>You don't have any accounts yet.</div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}
