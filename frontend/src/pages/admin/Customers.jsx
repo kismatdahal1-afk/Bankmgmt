@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import api from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
 
 export default function AdminCustomers() {
@@ -7,9 +8,8 @@ export default function AdminCustomers() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customers/')
-      .then(r => r.json())
-      .then(d => { setCustomers(d.customers || d); setLoading(false) })
+    api.get('/customers/')
+      .then(r => { setCustomers(r.data.customers || r.data); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
@@ -90,8 +90,8 @@ export default function AdminCustomers() {
                         onClick={async () => {
                           if (!confirm('Are you sure you want to close this customer account?')) return
                           try {
-                            const res = await fetch(`/api/customers/delete/${customer.id}`, { method: 'POST', credentials: 'include' })
-                            if (res.ok) { window.location.reload() }
+                            await api.post(`/customers/delete/${customer.id}`)
+                            window.location.reload()
                           } catch {}
                         }}>
                         <span className="material-symbols-rounded" style={{ fontSize: '1.1rem' }}>person_remove</span>

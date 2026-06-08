@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import api from '../../services/api'
 import CustomerFormComponent from '../../components/forms/CustomerForm'
 import CredentialCard from '../../components/common/CredentialCard'
 
@@ -13,38 +14,32 @@ export default function AdminCustomerForm() {
 
   useEffect(() => {
     if (isEdit) {
-      fetch(`/api/customers/${id}`)
-        .then(r => r.json())
-        .then(d => setCustomer(d.customer || d))
+      api.get(`/customers/${id}`)
+        .then(r => setCustomer(r.data.customer || r.data))
         .catch(err => console.error('Fetch error:', err))
     }
   }, [id, isEdit])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const formData = new FormData(e.target)
-    if (isEdit) {
-      try {
-        const res = await fetch(`/api/customers/edit/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
-        const data = await res.json()
-        if (data.error) { alert(data.error); return }
+    const formData = Object.fromEntries(new FormData(e.target))
+    try {
+      const url = isEdit ? `/customers/edit/${id}` : '/customers/create'
+      const res = await api.post(url, formData)
+      if (isEdit) {
         navigate('/admin/customers')
-      } catch (err) {
-        console.error(err)
-      }
-    } else {
-      try {
-        const res = await fetch('/api/customers/create', { method: 'POST', body: new URLSearchParams(formData) })
-        const data = await res.json()
-        if (data.error) { alert(data.error); return }
-        if (data.credentials) {
-          setCredentials(data.credentials)
+      } else {
+        if (res.data.credentials) {
+          setCredentials(res.data.credentials)
         } else {
           navigate('/admin/customers')
         }
-      } catch (err) {
-        console.error(err)
       }
+    } catch (err) {
+      if (err.response?.data?.error) {
+        alert(err.response.data.error)
+      }
+      console.error(err)
     }
   }
 
