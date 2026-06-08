@@ -23,7 +23,10 @@ const badgeClassMap = {
   'transfer': 'badge-info',
   'loan_disbursement': 'badge-info',
   'emi_payment': 'badge-success',
-  'interest_collection': 'badge-warning'
+  'interest_collection': 'badge-warning',
+  'archived': 'badge-muted',
+  'admin': 'badge-danger',
+  'staff': 'badge-info'
 }
 
 export default function StatusBadge({ status, children }) {

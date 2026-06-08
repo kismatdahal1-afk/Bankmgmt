@@ -28,7 +28,7 @@ export default function AdminCustomerForm() {
         const res = await fetch(`/api/customers/edit/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
         const data = await res.json()
         if (data.error) { alert(data.error); return }
-        navigate('/admin/customers')
+        navigate('/admin/accounts')
       } catch (err) {
         console.error(err)
       }
@@ -40,7 +40,7 @@ export default function AdminCustomerForm() {
         if (data.credentials) {
           setCredentials(data.credentials)
         } else {
-          navigate('/admin/customers')
+          navigate('/admin/accounts')
         }
       } catch (err) {
         console.error(err)
@@ -58,16 +58,16 @@ export default function AdminCustomerForm() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '10px' }}>
-        <Link to="/admin/customers" className="btn btn-secondary">
+        <Link to="/admin/accounts" className="btn btn-secondary">
           <span className="material-symbols-rounded">arrow_back</span>
-          Back to Customers
+          Back to Accounts
         </Link>
       </div>
 
       <CustomerFormComponent action={action} customer={customer} onSubmit={handleSubmit} />
 
       {credentials && (
-        <CredentialCard credentials={credentials} onClose={() => navigate('/admin/customers')} />
+        <CredentialCard credentials={credentials} onClose={() => navigate('/admin/accounts')} />
       )}
     </>
   )

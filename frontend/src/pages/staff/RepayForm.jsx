@@ -29,7 +29,9 @@ export default function StaffRepayForm() {
     e.preventDefault()
     const formData = new FormData(e.target)
     try {
-      await fetch(`/api/loans/repay/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
+      const res = await fetch(`/api/loans/repay/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
+      const data = await res.json()
+      if (data.error) { alert(data.error); return }
       navigate('/staff/loans')
     } catch (err) {
       console.error(err)

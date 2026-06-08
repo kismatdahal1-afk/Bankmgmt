@@ -21,7 +21,6 @@ export default function StaffLayout() {
         </div>
         <ul className="sidebar-nav">
           <li><NavLink to="/staff/dashboard"><span className="material-symbols-rounded">dashboard</span>Dashboard</NavLink></li>
-          <li><NavLink to="/staff/customers"><span className="material-symbols-rounded">group</span>Customers</NavLink></li>
           <li><NavLink to="/staff/accounts"><span className="material-symbols-rounded">account_balance</span>Accounts</NavLink></li>
           <li><NavLink to="/staff/transactions"><span className="material-symbols-rounded">payments</span>Transactions</NavLink></li>
           <li><NavLink to="/staff/loans"><span className="material-symbols-rounded">handshake</span>Loans</NavLink></li>

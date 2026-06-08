@@ -5,7 +5,7 @@ from decimal import Decimal
 from flask import Blueprint, request, jsonify, session, g
 from database.db import db
 from models import User, Customer, Account, Transaction, Loan, Repayment, Notification, AuditLog
-from utils.helpers import generate_customer_id, generate_username, generate_temporary_password, generate_account_number
+from utils.helpers import generate_customer_id, generate_username_from_phone, generate_password_from_name_phone, generate_account_number, validate_citizenship_format
 from utils.emi_calculator import calculate_emi_and_payable
 from utils.audit_helper import log_audit, create_notification, notify_customer, notify_staff
 from utils.report_helper import (
@@ -32,6 +32,19 @@ def staff_or_admin_required(f):
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return jsonify({'error': 'Authentication required'}), 401
+        g.current_user = User.query.get(session['user_id'])
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        user = User.query.get(session['user_id'])
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Only admins can perform this action'}), 403
+        g.current_user = user
         return f(*args, **kwargs)
     return decorated
 
@@ -44,6 +57,8 @@ def customer_login_required_api(f):
     return decorated
 
 def _serialize_customer(c):
+    active_loans = [l for l in c.loans if l.status in ('pending', 'approved', 'active')] if c.loans else []
+    total_loan_amount = sum(float(l.amount) for l in active_loans)
     return {
         'id': c.id,
         'customer_id': c.customer_id,
@@ -71,7 +86,23 @@ def _serialize_customer(c):
         'email_confirmed': c.email_confirmed,
         'status': c.status,
         'created_at': c.created_at.isoformat() if c.created_at else None,
-        'accounts': [_serialize_account(a) for a in c.accounts] if c.accounts else []
+        'accounts': [_serialize_account(a) for a in c.accounts] if c.accounts else [],
+        'active_loans_count': len(active_loans),
+        'total_loan_amount': total_loan_amount,
+        'loans': [_serialize_loan_compact(l) for l in c.loans] if c.loans else []
+    }
+
+def _serialize_loan_compact(l):
+    return {
+        'id': l.id,
+        'loan_number': l.loan_number,
+        'amount': float(l.amount),
+        'interest_rate': float(l.interest_rate),
+        'emi': float(l.emi),
+        'total_payable': float(l.total_payable),
+        'total_paid': float(l.total_paid),
+        'status': l.status,
+        'applied_date': l.applied_date.isoformat() if l.applied_date else None
     }
 
 def _serialize_account(a):
@@ -130,7 +161,7 @@ def _compute_loan_overdue(l):
         months_elapsed = (now.year - l.approved_date.year) * 12 + (now.month - l.approved_date.month)
         expected_emis_paid = min(months_elapsed, l.duration_months)
         expected_min_paid = expected_emis_paid * float(l.emi or 0)
-        if float(l.total_paid) < expected_min_paid * Decimal('0.5'):
+        if float(l.total_paid) < expected_min_paid * 0.5:
             return True
     return l.last_payment_date and (now - l.last_payment_date).days > 60
 
@@ -238,7 +269,40 @@ def api_customer_logout():
 @api_bp.route('/customers/', methods=['GET'])
 @staff_or_admin_required
 def api_list_customers():
-    customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    query = Customer.query
+
+    search = request.args.get('search', '').strip()
+    name_filter = request.args.get('name', '').strip()
+    phone_filter = request.args.get('phone', '').strip()
+    citizenship_filter = request.args.get('citizenship', '').strip()
+    account_filter = request.args.get('account_number', '').strip()
+    account_type_filter = request.args.get('account_type', '').strip()
+    status_filter = request.args.get('status', '').strip()
+
+    if search:
+        like = f'%{search}%'
+        query = query.filter(
+            db.or_(
+                Customer.full_name.ilike(like),
+                Customer.phone_number.ilike(like),
+                Customer.citizenship_id.ilike(like),
+                Customer.email.ilike(like)
+            )
+        )
+    if name_filter:
+        query = query.filter(Customer.full_name.ilike(f'%{name_filter}%'))
+    if phone_filter:
+        query = query.filter(Customer.phone_number.ilike(f'%{phone_filter}%'))
+    if citizenship_filter:
+        query = query.filter(Customer.citizenship_id.ilike(f'%{citizenship_filter}%'))
+    if status_filter:
+        query = query.filter(Customer.status == status_filter)
+    if account_type_filter:
+        query = query.filter(Customer.accounts.any(Account.account_type == account_type_filter))
+    if account_filter:
+        query = query.filter(Customer.accounts.any(Account.account_number.ilike(f'%{account_filter}%')))
+
+    customers = query.order_by(Customer.created_at.desc()).all()
     return jsonify({'customers': [_serialize_customer(c) for c in customers]})
 
 @api_bp.route('/customers/<int:customer_id>', methods=['GET'])
@@ -263,6 +327,9 @@ def api_create_customer():
     if not citizenship_id:
         return jsonify({'error': 'Citizenship ID is required'}), 400
 
+    if not validate_citizenship_format(citizenship_id):
+        return jsonify({'error': 'Invalid Citizenship Format. Expected format: 121516-1012'}), 400
+
     if Customer.query.filter_by(phone_number=phone_number).first():
         return jsonify({'error': 'Phone number already registered'}), 400
     if Customer.query.filter_by(citizenship_id=citizenship_id).first():
@@ -276,22 +343,15 @@ def api_create_customer():
 
     try:
         customer_id_str = generate_customer_id()
-        custom_username = (data.get('username') or '').strip()
-        custom_password = data.get('password', '').strip()
-        if custom_username:
-            if len(custom_username) < 3:
-                return jsonify({'error': 'Username must be at least 3 characters'}), 400
-            if Customer.query.filter_by(username=custom_username).first():
-                return jsonify({'error': 'Username already taken'}), 400
-            username = custom_username
-        else:
-            username = generate_username()
-        if custom_password:
-            if len(custom_password) < 4:
-                return jsonify({'error': 'Password must be at least 4 characters'}), 400
-            temp_password = custom_password
-        else:
-            temp_password = generate_temporary_password()
+
+        # Username = phone number
+        username = generate_username_from_phone(phone_number)
+        if Customer.query.filter_by(username=username).first():
+            return jsonify({'error': 'Username (phone number) already registered'}), 400
+
+        # Auto-generated password based on name + phone
+        temp_password = generate_password_from_name_phone(full_name, phone_number)
+
         account_num = generate_account_number()
 
         dob_str = data.get('dob')
@@ -432,25 +492,126 @@ def api_edit_customer(customer_id):
     log_audit('customer_updated', 'customer', customer_id, f'Customer {customer.full_name} profile updated')
     return jsonify({'message': 'Customer updated successfully', 'customer': _serialize_customer(customer)})
 
-@api_bp.route('/customers/delete/<int:customer_id>', methods=['POST'])
+@api_bp.route('/customers/summary', methods=['GET'])
 @staff_or_admin_required
-def api_delete_customer(customer_id):
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Only admins can delete customers'}), 403
+def api_customers_summary():
+    total = Customer.query.count()
+    active = Customer.query.filter_by(status='active').count()
+    suspended = Customer.query.filter_by(status='suspended').count()
+    closed = Customer.query.filter_by(status='closed').count()
+    archived = Customer.query.filter_by(status='archived').count()
+    total_deposits = db.session.query(db.func.coalesce(db.func.sum(Account.total_deposits), 0)).scalar()
+    total_loans = db.session.query(db.func.coalesce(db.func.sum(Loan.amount), 0)).filter(Loan.status.in_(['pending', 'approved', 'active'])).scalar()
+    return jsonify({
+        'total_customers': total,
+        'active_customers': active,
+        'suspended_customers': suspended,
+        'closed_customers': closed,
+        'archived_customers': archived,
+        'total_deposits': float(total_deposits),
+        'total_loans': float(total_loans)
+    })
+
+@api_bp.route('/customers/<int:customer_id>/status', methods=['POST'])
+@admin_required
+def api_update_customer_status(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    customer.status = 'inactive'
-    for account in customer.accounts:
-        account.status = 'closed'
+    data = request.get_json(silent=True) or request.form
+    new_status = (data.get('status') or '').strip().lower()
+    valid_statuses = ['active', 'suspended', 'closed', 'archived']
+    if new_status not in valid_statuses:
+        return jsonify({'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'}), 400
+    customer.status = new_status
+    if new_status == 'closed':
+        for account in customer.accounts:
+            account.status = 'closed'
+    elif new_status == 'active':
+        for account in customer.accounts:
+            account.status = 'active'
     db.session.commit()
-    log_audit('customer_deactivated', 'customer', customer_id, f'Customer {customer.full_name} deactivated (set inactive)')
-    return jsonify({'message': 'Customer account closed successfully'})
+    log_audit(f'customer_{new_status}', 'customer', customer_id, f'Customer {customer.full_name} status set to {new_status}')
+    return jsonify({'message': f'Customer status updated to {new_status}', 'customer': _serialize_customer(customer)})
+
+@api_bp.route('/customers/<int:customer_id>/reset-password', methods=['POST'])
+@staff_or_admin_required
+def api_reset_customer_password(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    data = request.get_json(silent=True) or request.form
+    new_password = (data.get('new_password') or '').strip()
+    if new_password:
+        current_password = data.get('current_password', '')
+        if current_password and not customer.check_password(current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        has_letter = any(c.isalpha() for c in new_password)
+        has_digit = any(c.isdigit() for c in new_password)
+        has_special = any(not c.isalnum() for c in new_password)
+        if not (has_letter and has_digit and has_special):
+            return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
+        customer.set_password(new_password)
+        customer.must_change_password = True
+        db.session.commit()
+        log_audit('customer_password_reset', 'customer', customer_id, f'Password manually reset for {customer.full_name}')
+        return jsonify({'message': 'Password updated successfully'})
+    temp_password = generate_password_from_name_phone(customer.full_name, customer.phone_number)
+    customer.set_password(temp_password)
+    customer.must_change_password = True
+    db.session.commit()
+    log_audit('customer_password_reset', 'customer', customer_id, f'Password reset for {customer.full_name}')
+    return jsonify({'message': 'Password reset successfully', 'temporary_password': temp_password})
 
 # ===== ACCOUNT ENDPOINTS =====
 
 @api_bp.route('/accounts/', methods=['GET'])
 @staff_or_admin_required
 def api_list_accounts():
-    accounts = Account.query.order_by(Account.created_at.desc()).all()
+    query = Account.query
+
+    acc_num = request.args.get('account_number', '').strip()
+    name = request.args.get('name', '').strip()
+    phone = request.args.get('phone', '').strip()
+    citizenship = request.args.get('citizenship', '').strip()
+    acc_type = request.args.get('account_type', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    bal_min = request.args.get('balance_min', '').strip()
+    bal_max = request.args.get('balance_max', '').strip()
+    created_at = request.args.get('created_at', '').strip()
+
+    if acc_num:
+        query = query.filter(Account.account_number.ilike(f'%{acc_num}%'))
+    needs_join = name or phone or citizenship
+    if needs_join:
+        query = query.join(Customer, Account.customer_id == Customer.id)
+    if name:
+        query = query.filter(Customer.full_name.ilike(f'%{name}%'))
+    if phone:
+        query = query.filter(Customer.phone_number.ilike(f'%{phone}%'))
+    if citizenship:
+        query = query.filter(Customer.citizenship_id.ilike(f'%{citizenship}%'))
+    if bal_min:
+        try:
+            query = query.filter(Account.balance >= Decimal(bal_min))
+        except Exception:
+            pass
+    if bal_max:
+        try:
+            query = query.filter(Account.balance <= Decimal(bal_max))
+        except Exception:
+            pass
+    if created_at:
+        try:
+            dt = datetime.datetime.strptime(created_at, '%Y-%m-%d')
+            query = query.filter(db.func.date(Account.created_at) == dt.date())
+        except ValueError:
+            pass
+
+    if acc_type:
+        query = query.filter(Account.account_type == acc_type)
+    if status_filter:
+        query = query.filter(Account.status == status_filter)
+
+    accounts = query.order_by(Account.created_at.desc()).all()
     return jsonify({'accounts': [_serialize_account(a) for a in accounts]})
 
 @api_bp.route('/accounts/<account_number>', methods=['GET'])
@@ -483,6 +644,40 @@ def api_create_account():
         f'A new {account_type} account ({acc_num}) has been created for you.')
     return jsonify({'message': 'Account created', 'account': _serialize_account(account)})
 
+@api_bp.route('/accounts/detail/<int:account_id>', methods=['GET'])
+@staff_or_admin_required
+def api_account_detail(account_id):
+    account = db.session.get(Account, account_id)
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    customer = account.customer
+    # Loans for this customer
+    loans = Loan.query.filter_by(customer_id=customer.id).order_by(Loan.applied_date.desc()).all() if customer else []
+    # Transactions for this account
+    transactions = Transaction.query.filter_by(account_id=account.id).order_by(Transaction.created_at.desc()).all()
+    # Activity log entries referencing this account or its customer
+    activity = []
+    if customer:
+        activity = AuditLog.query.filter(
+            db.or_(
+                AuditLog.resource_type == 'account',
+                AuditLog.resource_id == str(account.id),
+                AuditLog.resource_type == 'customer',
+                AuditLog.resource_id == str(customer.id)
+            )
+        ).order_by(AuditLog.created_at.desc()).limit(50).all()
+    return jsonify({
+        'account': _serialize_account(account),
+        'customer': _serialize_customer(customer) if customer else None,
+        'loans': [_serialize_loan(l) for l in loans],
+        'transactions': [_serialize_transaction(t) for t in transactions],
+        'activity': [{
+            'id': l.id, 'action': l.action, 'description': l.description,
+            'username': l.username, 'role': l.role,
+            'status': l.status, 'created_at': l.created_at.isoformat() if l.created_at else None
+        } for l in activity]
+    })
+
 @api_bp.route('/accounts/freeze/<int:account_id>', methods=['POST'])
 @staff_or_admin_required
 def api_freeze_account(account_id):
@@ -506,10 +701,8 @@ def api_unfreeze_account(account_id):
     return jsonify({'message': 'Account unfrozen', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/close/<int:account_id>', methods=['POST'])
-@staff_or_admin_required
+@admin_required
 def api_close_account(account_id):
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Only admins can close accounts'}), 403
     account = Account.query.get_or_404(account_id)
     if account.balance > 0:
         return jsonify({'error': 'Account has remaining balance. Withdraw funds first.'}), 400
@@ -517,6 +710,158 @@ def api_close_account(account_id):
     db.session.commit()
     log_audit('account_closed', 'account', account_id, f'Account {account.account_number} closed')
     return jsonify({'message': 'Account closed', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/suspend/<int:account_id>', methods=['POST'])
+@staff_or_admin_required
+def api_suspend_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    if account.status == 'closed':
+        return jsonify({'error': 'Cannot suspend a closed account'}), 400
+    account.status = 'suspended'
+    db.session.commit()
+    log_audit('account_suspended', 'account', account_id, f'Account {account.account_number} suspended')
+    return jsonify({'message': 'Account suspended', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/unsuspend/<int:account_id>', methods=['POST'])
+@staff_or_admin_required
+def api_unsuspend_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    if account.status != 'suspended':
+        return jsonify({'error': 'Account is not suspended'}), 400
+    account.status = 'active'
+    db.session.commit()
+    log_audit('account_unsuspended', 'account', account_id, f'Account {account.account_number} unsuspended')
+    return jsonify({'message': 'Account unsuspended', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/archive/<int:account_id>', methods=['POST'])
+@admin_required
+def api_archive_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    account.status = 'archived'
+    db.session.commit()
+    log_audit('account_archived', 'account', account_id, f'Account {account.account_number} archived')
+    return jsonify({'message': 'Account archived', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/unarchive/<int:account_id>', methods=['POST'])
+@admin_required
+def api_unarchive_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    if account.status != 'archived':
+        return jsonify({'error': 'Account is not archived'}), 400
+    account.status = 'active'
+    db.session.commit()
+    log_audit('account_unarchived', 'account', account_id, f'Account {account.account_number} unarchived')
+    return jsonify({'message': 'Account unarchived', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/reopen/<int:account_id>', methods=['POST'])
+@admin_required
+def api_reopen_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    if account.status != 'closed':
+        return jsonify({'error': 'Account is not closed'}), 400
+    account.status = 'active'
+    db.session.commit()
+    log_audit('account_reopened', 'account', account_id, f'Account {account.account_number} reopened')
+    return jsonify({'message': 'Account reopened', 'account': _serialize_account(account)})
+
+@api_bp.route('/customers/forgot-password/verify', methods=['POST'])
+@staff_or_admin_required
+def api_forgot_password_verify():
+    """Step 1: Verify customer identity using account#, citizenship, phone, DOB."""
+    data = request.get_json(silent=True) or request.form
+    account_number = (data.get('account_number') or '').strip()
+    citizenship_id = (data.get('citizenship_id') or '').strip()
+    phone_number = (data.get('phone_number') or '').strip()
+    dob_str = (data.get('dob') or '').strip()
+    if not all([account_number, citizenship_id, phone_number, dob_str]):
+        return jsonify({'verified': False, 'error': 'All fields are required'}), 400
+    account = Account.query.filter_by(account_number=account_number).first()
+    if not account:
+        return jsonify({'verified': False, 'error': 'Account not found'}), 404
+    customer = account.customer
+    if not customer:
+        return jsonify({'verified': False, 'error': 'Customer not found'}), 404
+    if customer.citizenship_id != citizenship_id:
+        return jsonify({'verified': False, 'error': 'Citizenship number does not match'}), 400
+    if customer.phone_number != phone_number:
+        return jsonify({'verified': False, 'error': 'Phone number does not match'}), 400
+    try:
+        dob = datetime.datetime.strptime(dob_str, '%Y-%m-%d').date()
+        if customer.dob != dob:
+            return jsonify({'verified': False, 'error': 'Date of birth does not match'}), 400
+    except ValueError:
+        return jsonify({'verified': False, 'error': 'Invalid date format'}), 400
+    return jsonify({'verified': True, 'customer_id': customer.id, 'customer_name': customer.full_name})
+
+@api_bp.route('/customers/forgot-password/set', methods=['POST'])
+@staff_or_admin_required
+def api_forgot_password_set():
+    """Step 2: After verification, set new password using customer_id + new_password."""
+    data = request.get_json(silent=True) or request.form
+    customer_id = data.get('customer_id')
+    new_password = (data.get('new_password') or '').strip()
+    if not customer_id:
+        return jsonify({'error': 'customer_id is required'}), 400
+    try:
+        customer = Customer.query.get(int(customer_id))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid customer_id'}), 400
+    if not customer:
+        return jsonify({'error': 'Customer not found'}), 404
+    if not new_password or len(new_password) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters and contain letters, numbers, and special characters'}), 400
+    has_letter = any(c.isalpha() for c in new_password)
+    has_digit = any(c.isdigit() for c in new_password)
+    has_special = any(not c.isalnum() for c in new_password)
+    if not (has_letter and has_digit and has_special):
+        return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
+    customer.set_password(new_password)
+    customer.must_change_password = True
+    db.session.commit()
+    log_audit('customer_password_forgot', 'customer', customer.id, f'Password set via forgot-password flow for {customer.full_name}')
+    return jsonify({'message': 'Password has been updated successfully.'})
+
+@api_bp.route('/customers/<int:customer_id>/forgot-password', methods=['POST'])
+def api_customer_forgot_password():
+    data = request.get_json(silent=True) or request.form
+    account_number = (data.get('account_number') or '').strip()
+    citizenship_id = (data.get('citizenship_id') or '').strip()
+    phone_number = (data.get('phone_number') or '').strip()
+    dob_str = (data.get('dob') or '').strip()
+    if not all([account_number, citizenship_id, phone_number, dob_str]):
+        return jsonify({'error': 'All fields are required'}), 400
+    account = Account.query.filter_by(account_number=account_number).first()
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    customer = account.customer
+    if not customer:
+        return jsonify({'error': 'Customer not found'}), 404
+    if customer.citizenship_id != citizenship_id:
+        return jsonify({'error': 'Citizenship number does not match'}), 400
+    if customer.phone_number != phone_number:
+        return jsonify({'error': 'Phone number does not match'}), 400
+    try:
+        dob = datetime.datetime.strptime(dob_str, '%Y-%m-%d').date()
+        if customer.dob != dob:
+            return jsonify({'error': 'Date of birth does not match'}), 400
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+    data = request.get_json(silent=True) or request.form
+    new_password = (data.get('new_password') or '').strip()
+    if new_password:
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        customer.set_password(new_password)
+        customer.must_change_password = True
+        db.session.commit()
+        log_audit('customer_password_forgot', 'customer', customer.id, f'Password set via forgot password for {customer.full_name}')
+        return jsonify({'message': 'Identity verified. Password has been updated.'})
+    temp_password = generate_password_from_name_phone(customer.full_name, customer.phone_number)
+    customer.set_password(temp_password)
+    customer.must_change_password = True
+    db.session.commit()
+    log_audit('customer_password_forgot', 'customer', customer.id, f'Password reset via forgot password for {customer.full_name}')
+    return jsonify({'message': 'Identity verified. Password has been reset.', 'temporary_password': temp_password})
 
 # ===== TRANSACTION ENDPOINTS =====
 
@@ -686,10 +1031,8 @@ def api_apply_loan():
     return jsonify({'message': 'Loan application submitted', 'loan': _serialize_loan(loan)})
 
 @api_bp.route('/loans/approve/<int:loan_id>', methods=['POST'])
-@staff_or_admin_required
+@admin_required
 def api_approve_loan(loan_id):
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Only admins can approve loans'}), 403
     loan = Loan.query.get_or_404(loan_id)
     if loan.status != 'pending':
         return jsonify({'error': 'Loan already processed'}), 400
@@ -722,10 +1065,8 @@ def api_approve_loan(loan_id):
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/loans/reject/<int:loan_id>', methods=['POST'])
-@staff_or_admin_required
+@admin_required
 def api_reject_loan(loan_id):
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Only admins can reject loans'}), 403
     loan = Loan.query.get_or_404(loan_id)
     if loan.status != 'pending':
         return jsonify({'error': 'Loan already processed'}), 400
@@ -1017,18 +1358,14 @@ def api_export_report():
 # ===== STAFF MANAGEMENT =====
 
 @api_bp.route('/staff/', methods=['GET'])
-@staff_or_admin_required
+@admin_required
 def api_list_staff():
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     staff = User.query.order_by(User.created_at.desc()).all()
     return jsonify({'staff': [{'id': s.id, 'username': s.username, 'role': s.role, 'created_at': s.created_at.isoformat() if s.created_at else None} for s in staff]})
 
 @api_bp.route('/staff/create', methods=['POST'])
-@staff_or_admin_required
+@admin_required
 def api_create_staff():
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     data = request.get_json(silent=True) or request.form
     username = (data.get('username') or '').strip()
     password = data.get('password', '')
@@ -1044,10 +1381,8 @@ def api_create_staff():
     return jsonify({'message': 'Staff created', 'staff': {'id': user.id, 'username': user.username, 'role': user.role, 'created_at': user.created_at.isoformat() if user.created_at else None}})
 
 @api_bp.route('/staff/delete/<int:user_id>', methods=['POST'])
-@staff_or_admin_required
+@admin_required
 def api_delete_staff(user_id):
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     user = User.query.get_or_404(user_id)
     if user.role == 'admin' and User.query.filter_by(role='admin').count() <= 1:
         return jsonify({'error': 'Cannot delete the last admin'}), 400
@@ -1263,10 +1598,8 @@ def api_clear_notifications():
 # ===== AUDIT LOGS =====
 
 @api_bp.route('/audit-logs/', methods=['GET'])
-@staff_or_admin_required
+@admin_required
 def api_list_audit_logs():
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     limit = request.args.get('limit', '50')
     action_filter = request.args.get('action', '')
     date_from = request.args.get('date_from', '')
@@ -1310,18 +1643,14 @@ def api_list_audit_logs():
     })
 
 @api_bp.route('/audit-logs/actions', methods=['GET'])
-@staff_or_admin_required
+@admin_required
 def api_list_audit_actions():
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     actions = db.session.query(AuditLog.action, db.func.count(AuditLog.id)).group_by(AuditLog.action).order_by(db.func.count(AuditLog.id).desc()).all()
     return jsonify({'actions': [{'action': a[0], 'count': a[1]} for a in actions]})
 
 @api_bp.route('/audit-logs/summary', methods=['GET'])
-@staff_or_admin_required
+@admin_required
 def api_audit_summary():
-    if session.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
     total = AuditLog.query.count()
     today = _utcnow().date()
     start = datetime.datetime.combine(today, datetime.time.min)

@@ -8,7 +8,6 @@ import AdminLayout from '../layouts/AdminLayout/AdminLayout'
 import StaffLayout from '../layouts/StaffLayout/StaffLayout'
 import UserLayout from '../layouts/UserLayout/UserLayout'
 import AdminDashboard from '../pages/admin/Dashboard'
-import AdminCustomers from '../pages/admin/Customers'
 import AdminCustomerForm from '../pages/admin/CustomerForm'
 import AdminAccounts from '../pages/admin/Accounts'
 import AdminLoans from '../pages/admin/Loans'
@@ -21,9 +20,10 @@ import AdminReports from '../pages/admin/Reports'
 import AdminStaffManagement from '../pages/admin/StaffManagement'
 import AdminSettings from '../pages/admin/Settings'
 import AdminAuditLogs from '../pages/admin/AdminAuditLogs'
+import AdminAccountDetail from '../pages/admin/AccountDetail'
+import StaffAccountDetail from '../pages/staff/AccountDetail'
 import StaffReports from '../pages/staff/Reports'
 import StaffDashboard from '../pages/staff/Dashboard'
-import StaffCustomers from '../pages/staff/Customers'
 import StaffCustomerForm from '../pages/staff/CustomerForm'
 import StaffAccounts from '../pages/staff/Accounts'
 import StaffLoans from '../pages/staff/Loans'
@@ -53,10 +53,9 @@ export default function AppRoutes() {
       <Route path="/admin" element={<PrivateRoute role="admin"><AdminLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
-        <Route path="customers" element={<AdminCustomers />} />
-        <Route path="customers/create" element={<AdminCustomerForm />} />
-        <Route path="customers/edit/:id" element={<AdminCustomerForm />} />
         <Route path="accounts" element={<AdminAccounts />} />
+        <Route path="customers/edit/:id" element={<AdminCustomerForm />} />
+        <Route path="account-management/:accountId" element={<AdminAccountDetail />} />
         <Route path="loans" element={<AdminLoans />} />
         <Route path="loans/apply" element={<AdminLoanForm />} />
         <Route path="loans/repay/:id" element={<AdminRepayForm />} />
@@ -72,10 +71,9 @@ export default function AppRoutes() {
       <Route path="/staff" element={<PrivateRoute role="staff"><StaffLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<StaffDashboard />} />
-        <Route path="customers" element={<StaffCustomers />} />
-        <Route path="customers/create" element={<StaffCustomerForm />} />
-        <Route path="customers/edit/:id" element={<StaffCustomerForm />} />
         <Route path="accounts" element={<StaffAccounts />} />
+        <Route path="customers/edit/:id" element={<StaffCustomerForm />} />
+        <Route path="account-management/:accountId" element={<StaffAccountDetail />} />
         <Route path="loans" element={<StaffLoans />} />
         <Route path="loans/apply" element={<StaffLoanForm />} />
         <Route path="loans/repay/:id" element={<StaffRepayForm />} />

@@ -63,6 +63,18 @@ export function calculateEMI(principal, annualRate, durationMonths) {
   }
 }
 
+export function validateCitizenship(id) {
+  if (!id) return false
+  return /^\d{6}-\d{4}$/.test(id)
+}
+
+export function generatePasswordFromNamePhone(name, phone) {
+  if (!name || !phone) return ''
+  const namePart = (name.slice(0, 2) || name[0] + 'X').toUpperCase()
+  const phonePart = phone.slice(-3).padStart(3, '0')
+  return '@' + namePart + phonePart
+}
+
 export function getStatusBadgeClass(status) {
   const map = {
     'pending': 'badge-warning',

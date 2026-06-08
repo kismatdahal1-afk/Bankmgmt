@@ -14,8 +14,8 @@ export default function LoanForm({ customers, onSubmit }) {
         <form onSubmit={onSubmit}>
           <div className="form-group">
             <label htmlFor="customer_id">Select Borrower</label>
-            <select id="customer_id" name="customer_id" className="form-control" required>
-              <option value="" disabled selected>-- Choose Customer --</option>
+            <select id="customer_id" name="customer_id" className="form-control" required defaultValue="">
+              <option value="" disabled>-- Choose Customer --</option>
               {customers?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.full_name}

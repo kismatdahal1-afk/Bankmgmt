@@ -21,7 +21,6 @@ export default function AdminLayout() {
         </div>
         <ul className="sidebar-nav">
           <li><NavLink to="/admin/dashboard"><span className="material-symbols-rounded">dashboard</span>Dashboard</NavLink></li>
-          <li><NavLink to="/admin/customers"><span className="material-symbols-rounded">group</span>Customers</NavLink></li>
           <li><NavLink to="/admin/accounts"><span className="material-symbols-rounded">account_balance</span>Accounts</NavLink></li>
           <li><NavLink to="/admin/transactions"><span className="material-symbols-rounded">payments</span>Transactions</NavLink></li>
           <li><NavLink to="/admin/loans"><span className="material-symbols-rounded">handshake</span>Loans</NavLink></li>

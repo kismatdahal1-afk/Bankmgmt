@@ -50,7 +50,7 @@ def deposit():
         db.session.add(transaction)
         db.session.commit()
 
-        flash(f'Successfully deposited  to account {account_number}', 'success')
+        flash(f'Successfully deposited {amount} to account {account_number}', 'success')
         return redirect(url_for('transaction.transactions_list'))
 
     accounts = Account.query.filter_by(status='active').all()
@@ -85,7 +85,7 @@ def withdraw():
             return redirect(url_for('transaction.withdraw'))
 
         if account.balance < amount:
-            flash(f'Insufficient funds. Available balance: ', 'danger')
+            flash(f'Insufficient funds. Available balance: {account.balance}', 'danger')
             return redirect(url_for('transaction.withdraw'))
 
         old_balance = account.balance
@@ -104,7 +104,7 @@ def withdraw():
         db.session.add(transaction)
         db.session.commit()
 
-        flash(f'Successfully withdrew  from account {account_number}', 'success')
+        flash(f'Successfully withdrew {amount} from account {account_number}', 'success')
         return redirect(url_for('transaction.transactions_list'))
 
     accounts = Account.query.filter_by(status='active').all()

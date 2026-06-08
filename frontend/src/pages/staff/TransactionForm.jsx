@@ -22,7 +22,9 @@ export default function StaffTransactionForm() {
     const formData = new FormData(e.target)
     const url = isDeposit ? '/api/transactions/deposit' : '/api/transactions/withdraw'
     try {
-      await fetch(url, { method: 'POST', body: new URLSearchParams(formData) })
+      const res = await fetch(url, { method: 'POST', body: new URLSearchParams(formData) })
+      const data = await res.json()
+      if (data.error) { alert(data.error); return }
       navigate('/staff/transactions')
     } catch (err) {
       console.error(err)

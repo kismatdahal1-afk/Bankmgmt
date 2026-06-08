@@ -23,8 +23,9 @@ export default function AdminTransactionForm() {
     const url = isDeposit ? '/api/transactions/deposit' : '/api/transactions/withdraw'
     try {
       const res = await fetch(url, { method: 'POST', body: new URLSearchParams(formData) })
-      if (res.redirected) navigate('/admin/transactions')
-      else navigate('/admin/transactions')
+      const data = await res.json()
+      if (data.error) { alert(data.error); return }
+      navigate('/admin/transactions')
     } catch (err) {
       console.error(err)
     }

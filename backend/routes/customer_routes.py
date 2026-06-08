@@ -4,14 +4,14 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from database.db import db
 from models import Customer, Account, Transaction
 from middleware.authentication import login_required
-from utils.helpers import generate_account_number
+from utils.helpers import generate_account_number, generate_customer_id, generate_username_from_phone, generate_password_from_name_phone
 
 customer_bp = Blueprint('customer', __name__, template_folder='../templates', url_prefix='/customers')
 
 @customer_bp.route('/')
 @login_required
 def list_customers():
-    customers = Customer.query.filter_by(status='active').order_by(Customer.created_at.desc()).all()
+    customers = Customer.query.order_by(Customer.created_at.desc()).all()
     return render_template('customers.html', customers=customers)
 
 @customer_bp.route('/create', methods=['GET', 'POST'])
@@ -47,12 +47,20 @@ def create_customer():
             return render_template('customer_form.html', action='Create')
 
         try:
+            customer_id_str = generate_customer_id()
+            username = generate_username_from_phone(phone_number)
+            temp_password = generate_password_from_name_phone(full_name, phone_number)
+
             new_customer = Customer(
+                customer_id=customer_id_str,
                 full_name=full_name,
                 address=address,
                 phone_number=phone_number,
-                citizenship_id=citizenship_id
+                citizenship_id=citizenship_id,
+                username=username,
+                must_change_password=True
             )
+            new_customer.set_password(temp_password)
             db.session.add(new_customer)
             db.session.flush()
 
@@ -78,7 +86,7 @@ def create_customer():
                 db.session.add(txn)
 
             db.session.commit()
-            flash(f"Customer profile and {account_type.capitalize()} Account #{account_num} created successfully!", "success")
+            flash(f"Customer profile and {account_type.capitalize()} Account #{account_num} created successfully! Username: {username}, Password: {temp_password}", "success")
             return redirect(url_for('customer.list_customers'))
         except Exception as e:
             db.session.rollback()
@@ -131,7 +139,7 @@ def edit_customer(customer_id):
 def delete_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     try:
-        customer.status = 'inactive'
+        customer.status = 'closed'
         for account in customer.accounts:
             account.status = 'closed'
         db.session.commit()

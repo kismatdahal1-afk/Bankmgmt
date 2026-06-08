@@ -28,7 +28,7 @@ export default function StaffCustomerForm() {
         const res = await fetch(`/api/customers/edit/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
         const data = await res.json()
         if (data.error) { alert(data.error); return }
-        navigate('/staff/customers')
+        navigate('/staff/accounts')
       } catch (err) {
         console.error(err)
       }
@@ -40,7 +40,7 @@ export default function StaffCustomerForm() {
         if (data.credentials) {
           setCredentials(data.credentials)
         } else {
-          navigate('/staff/customers')
+          navigate('/staff/accounts')
         }
       } catch (err) {
         console.error(err)
@@ -58,16 +58,16 @@ export default function StaffCustomerForm() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '10px' }}>
-        <Link to="/staff/customers" className="btn btn-secondary">
+        <Link to="/staff/accounts" className="btn btn-secondary">
           <span className="material-symbols-rounded">arrow_back</span>
-          Back to Customers
+          Back to Accounts
         </Link>
       </div>
 
       <CustomerFormComponent action={action} customer={customer} onSubmit={handleSubmit} />
 
       {credentials && (
-        <CredentialCard credentials={credentials} onClose={() => navigate('/staff/customers')} />
+        <CredentialCard credentials={credentials} onClose={() => navigate('/staff/accounts')} />
       )}
     </>
   )

@@ -58,7 +58,7 @@ class Customer(db.Model):
     must_change_password = db.Column(db.Boolean, default=True, nullable=False)
     mobile_confirmed = db.Column(db.Boolean, default=False, nullable=False)
     email_confirmed = db.Column(db.Boolean, default=False, nullable=False)
-    status = db.Column(db.String(20), default='active', nullable=False) # 'active', 'inactive'
+    status = db.Column(db.String(20), default='active', nullable=False) # 'active', 'suspended', 'closed', 'archived'
     created_at = db.Column(db.DateTime, default=_utcnow)
 
     # Relationships

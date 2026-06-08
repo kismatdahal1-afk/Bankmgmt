@@ -4,7 +4,7 @@ from app import create_app
 from database.db import db
 from models import User, Customer, Account
 from decimal import Decimal
-from utils.helpers import generate_customer_id, generate_username, generate_temporary_password, generate_account_number
+from utils.helpers import generate_customer_id, generate_username_from_phone, generate_password_from_name_phone, generate_account_number
 
 def init_database():
     app = create_app()
@@ -34,8 +34,8 @@ def init_database():
         if not sample_customer:
             print("Seeding sample customer (john/password123)...")
             customer_id_str = generate_customer_id()
-            username = generate_username()
-            temp_pass = generate_temporary_password()
+            username = generate_username_from_phone('9876543210')
+            temp_pass = generate_password_from_name_phone('John Doe', '9876543210')
             customer = Customer(
                 customer_id=customer_id_str,
                 full_name='John Doe',

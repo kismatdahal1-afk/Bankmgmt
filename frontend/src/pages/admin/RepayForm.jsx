@@ -30,8 +30,9 @@ export default function AdminRepayForm() {
     const formData = new FormData(e.target)
     try {
       const res = await fetch(`/api/loans/repay/${id}`, { method: 'POST', body: new URLSearchParams(formData) })
-      if (res.redirected) navigate('/admin/loans')
-      else navigate('/admin/loans')
+      const data = await res.json()
+      if (data.error) { alert(data.error); return }
+      navigate('/admin/loans')
     } catch (err) {
       console.error(err)
     }

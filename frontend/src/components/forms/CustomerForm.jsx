@@ -1,12 +1,60 @@
-import React from 'react'
+import React, { useState, useRef, useCallback } from 'react'
+import { validateCitizenship, generatePasswordFromNamePhone } from '../../utils/helpers'
 
 export default function CustomerForm({ action, customer, onSubmit }) {
   const isCreate = action === 'Create'
+  const [citizenshipError, setCitizenshipError] = useState('')
+  const [previewName, setPreviewName] = useState('')
+  const [previewPhone, setPreviewPhone] = useState('')
+  const nameRef = useRef(null)
+  const phoneRef = useRef(null)
+
+  const handleNameInput = useCallback(() => {
+    setPreviewName(nameRef.current?.value || '')
+  }, [])
+
+  const handlePhoneInput = useCallback(() => {
+    setPreviewPhone(phoneRef.current?.value || '')
+  }, [])
+
+  const handleCitizenshipChange = (e) => {
+    const val = e.target.value
+    if (val && !validateCitizenship(val)) {
+      setCitizenshipError('Invalid Citizenship Format. Expected format: 121516-1012')
+    } else {
+      setCitizenshipError('')
+    }
+  }
+
+  const displayName = previewName || customer?.full_name || ''
+  const displayPhone = previewPhone || customer?.phone_number || ''
+  const generatedPassword = isCreate ? generatePasswordFromNamePhone(displayName, displayPhone) : ''
+  const generatedUsername = isCreate ? displayPhone : ''
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <div className="form-card" style={{ maxWidth: '800px', width: '100%' }}>
         <form onSubmit={onSubmit}>
+          {isCreate && (
+            <>
+              <h3 style={{ marginBottom: '16px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="material-symbols-rounded" style={{ color: 'var(--accent-color)' }}>key</span>
+                Generated Credentials
+              </h3>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div><span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Account Number</span>
+                    <div style={{ color: '#fff', fontWeight: 700, fontFamily: 'monospace', fontSize: '0.95rem', marginTop: '2px' }}>Auto-generated on save</div></div>
+                  <div><span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Username</span>
+                    <div style={{ color: 'var(--accent-color)', fontWeight: 700, fontFamily: 'monospace', fontSize: '0.95rem', marginTop: '2px' }}>{generatedUsername || 'Enter phone number'}</div></div>
+                  <div><span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Password</span>
+                    <div style={{ color: 'var(--warning)', fontWeight: 700, fontFamily: 'monospace', fontSize: '0.95rem', marginTop: '2px' }}>{generatedPassword || 'Enter name & phone'}</div></div>
+                </div>
+              </div>
+              <hr style={{ borderColor: 'var(--border-color)', margin: '0 0 24px 0' }} />
+            </>
+          )}
+
           <h3 style={{ marginBottom: '20px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-rounded" style={{ color: 'var(--accent-color)' }}>person</span>
             Personal Demographics
@@ -15,6 +63,7 @@ export default function CustomerForm({ action, customer, onSubmit }) {
           <div className="form-group">
             <label htmlFor="full_name">Full Name</label>
             <input type="text" id="full_name" name="full_name" className="form-control"
+              ref={nameRef} onInput={handleNameInput}
               defaultValue={customer?.full_name || ''} required placeholder="John Doe" />
           </div>
 
@@ -50,9 +99,16 @@ export default function CustomerForm({ action, customer, onSubmit }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="citizenship_id">Citizenship Number</label>
+              <label htmlFor="citizenship_id">Citizenship Number (Format: ######-####)</label>
               <input type="text" id="citizenship_id" name="citizenship_id" className="form-control"
-                defaultValue={customer?.citizenship_id || ''} required placeholder="ID-892749-X" />
+                defaultValue={customer?.citizenship_id || ''} onChange={handleCitizenshipChange}
+                required placeholder="121516-1012"
+                style={citizenshipError ? { borderColor: 'var(--danger)' } : {}} />
+              {citizenshipError && (
+                <span style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: '14px', verticalAlign: 'middle' }}>error</span> {citizenshipError}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label htmlFor="citizenship_issue_district">Citizenship Issue District</label>
@@ -90,7 +146,8 @@ export default function CustomerForm({ action, customer, onSubmit }) {
             <div className="form-group">
               <label htmlFor="phone_number">Mobile Number</label>
               <input type="tel" id="phone_number" name="phone_number" className="form-control"
-                defaultValue={customer?.phone_number || ''} required placeholder="+1 555-0199" />
+                ref={phoneRef} onInput={handlePhoneInput}
+                defaultValue={customer?.phone_number || ''} required placeholder="9841234567" />
             </div>
             <div className="form-group">
               <label htmlFor="alternate_mobile">Alternate Mobile Number</label>
@@ -161,7 +218,15 @@ export default function CustomerForm({ action, customer, onSubmit }) {
               defaultValue={customer?.nominee_relationship || ''} placeholder="e.g. Spouse, Sibling, Parent" />
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '20px' }}>
+          {citizenshipError && (
+            <div className="badge badge-danger" style={{ marginTop: '16px', padding: '10px 14px', display: 'flex', width: '100%' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '18px', marginRight: '8px' }}>error</span>
+              Please fix the citizenship number format before saving.
+            </div>
+          )}
+
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '20px' }}
+            disabled={isCreate && !!citizenshipError}>
             <span className="material-symbols-rounded">save</span>
             Save Customer Profile
           </button>
