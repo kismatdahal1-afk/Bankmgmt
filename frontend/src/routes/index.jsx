@@ -37,6 +37,7 @@ import FirstLoginFlow from '../components/common/FirstLoginFlow'
 import UserMyAccounts from '../pages/user/MyAccounts'
 import UserMyBalance from '../pages/user/MyBalance'
 import UserMyLoans from '../pages/user/MyLoans'
+import UserApplyLoan from '../pages/user/ApplyLoan'
 import UserEMIStatus from '../pages/user/EMIStatus'
 import UserTransactions from '../pages/user/Transactions'
 import UserNotifications from '../pages/user/Notifications'
@@ -92,6 +93,7 @@ export default function AppRoutes() {
         <Route path="my-accounts" element={<UserMyAccounts />} />
         <Route path="my-balance" element={<UserMyBalance />} />
         <Route path="my-loans" element={<UserMyLoans />} />
+        <Route path="loans/apply" element={<UserApplyLoan />} />
         <Route path="emi-status" element={<UserEMIStatus />} />
         <Route path="transactions" element={<UserTransactions />} />
         <Route path="notifications" element={<UserNotifications />} />

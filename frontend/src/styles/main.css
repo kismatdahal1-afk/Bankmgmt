@@ -131,6 +131,12 @@ a:hover { color: var(--accent-hover); }
     border-left: 3px solid var(--accent-color);
 }
 
+.sidebar-nav li a.active {
+    color: var(--accent-color);
+    border-left: 3px solid var(--accent-color);
+    background-color: transparent;
+}
+
 .sidebar-footer {
     padding: 20px;
     border-top: 1px solid var(--border-color);

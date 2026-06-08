@@ -1160,6 +1160,110 @@ def api_customer_loans():
     loans = Loan.query.filter_by(customer_id=customer.id).order_by(Loan.applied_date.desc()).all()
     return jsonify({'loans': [_serialize_loan(l) for l in loans]})
 
+@api_bp.route('/customer/loans/apply', methods=['POST'])
+@customer_login_required_api
+def api_customer_loan_apply():
+    try:
+        customer = db.session.get(Customer, session['customer_id'])
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        data = request.get_json(silent=True) or request.form
+        amount_str = data.get('amount')
+        interest_rate_str = data.get('interest_rate')
+        duration_str = data.get('duration_months')
+        if not all([amount_str, interest_rate_str, duration_str]):
+            return jsonify({'error': 'All loan fields are required'}), 400
+        try:
+            amount = Decimal(str(amount_str))
+            interest_rate = Decimal(str(interest_rate_str))
+            duration_months = int(duration_str)
+            if amount <= 0 or interest_rate < 0 or duration_months <= 0:
+                return jsonify({'error': 'Invalid loan parameters'}), 400
+        except Exception:
+            return jsonify({'error': 'Invalid numeric values'}), 400
+        emi, total_payable = calculate_emi_and_payable(amount, interest_rate, duration_months)
+        loan = Loan(
+            customer_id=customer.id,
+            amount=amount,
+            interest_rate=interest_rate,
+            duration_months=duration_months,
+            emi=emi,
+            total_payable=total_payable,
+            status='pending'
+        )
+        db.session.add(loan)
+        db.session.commit()
+        return jsonify({'message': 'Loan application submitted', 'loan': _serialize_loan(loan)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/customer/loans/repay/<int:loan_id>', methods=['POST'])
+@customer_login_required_api
+def api_customer_repay_loan(loan_id):
+    try:
+        customer = db.session.get(Customer, session['customer_id'])
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        loan = db.session.get(Loan, loan_id)
+        if not loan or loan.customer_id != customer.id:
+            return jsonify({'error': 'Loan not found'}), 404
+        if loan.status != 'approved':
+            return jsonify({'error': 'Loan is not active'}), 400
+        data = request.get_json(silent=True) or request.form
+        amount_str = data.get('amount')
+        if not amount_str:
+            return jsonify({'error': 'Amount is required'}), 400
+        try:
+            amount = Decimal(amount_str)
+            if amount <= 0:
+                return jsonify({'error': 'Amount must be positive'}), 400
+        except Exception:
+            return jsonify({'error': 'Invalid amount'}), 400
+        remaining = loan.total_payable - loan.total_paid
+        if amount > remaining:
+            return jsonify({'error': 'Amount exceeds remaining balance'}), 400
+        active_account = Account.query.filter_by(customer_id=customer.id, status='active').with_for_update().first()
+        if not active_account:
+            return jsonify({'error': 'No active account for deduction'}), 400
+        if active_account.balance < amount:
+            return jsonify({'error': 'Insufficient account balance'}), 400
+        loan.total_paid += amount
+        loan.last_payment_date = _utcnow()
+        is_full = loan.total_payable - loan.total_paid < Decimal('0.05')
+        if is_full:
+            loan.status = 'fully_paid'
+            loan.total_paid = loan.total_payable
+        active_account.balance -= amount
+        txn = Transaction(
+            account_id=active_account.id,
+            type='withdrawal',
+            amount=amount,
+            balance_after=active_account.balance,
+            description=f"Loan Repayment ({loan.loan_number})",
+            status='successful',
+            reference_number=f"LNR-{uuid.uuid4().hex[:8].upper()}",
+            created_by=session['customer_id']
+        )
+        db.session.add(txn)
+        emi_cnt = len(loan.repayments) + 1
+        repay = Repayment(
+            loan_id=loan.id,
+            amount=amount,
+            emi_number=emi_cnt,
+            status='paid',
+            received_by=session['customer_id']
+        )
+        db.session.add(repay)
+        log_audit('emi_collection', 'repayment', repay.id, f'EMI #{emi_cnt} of NPR {float(amount):,.2f} collected from customer {customer.full_name} for loan {loan.loan_number}')
+        notify_customer(loan.customer_id, 'EMI Payment Received',
+            f'EMI #{emi_cnt} of NPR {float(amount):,.2f} received for loan {loan.loan_number}.')
+        db.session.commit()
+        return jsonify({'message': 'Repayment successful', 'loan': _serialize_loan(loan)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/customer/transactions', methods=['GET'])
 @customer_login_required_api
 def api_customer_transactions():

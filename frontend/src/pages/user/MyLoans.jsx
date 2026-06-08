@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../../services/api'
 import LoanCard from '../../components/cards/LoanCard'
 import EmptyState from '../../components/common/EmptyState'
 
 export default function UserMyLoans() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [loans, setLoans] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -11,7 +14,7 @@ export default function UserMyLoans() {
     api.get('/customer/loans')
       .then(r => { setLoans(r.data.loans || []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }, [location.pathname])
 
   const overdueCount = (loans || []).filter(l => l.is_overdue).length
 
@@ -22,6 +25,10 @@ export default function UserMyLoans() {
           <div className="page-title">My Loans</div>
           <div className="page-subtitle">Track active loans, repayments and history.</div>
         </div>
+        <button className="btn btn-primary" onClick={() => navigate('/user/loans/apply')}>
+          <span className="material-symbols-rounded">add</span>
+          New Loan
+        </button>
       </div>
 
       {overdueCount > 0 && (
