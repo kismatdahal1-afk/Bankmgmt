@@ -726,3 +726,18 @@ Issue: Can't login
 Fix: Run python init_db.py to reset users, use admin/admin123
 
 This is a production-ready village banking system that can handle real-world cooperative banking operations with proper security, audit trails, and professional UI!
+
+
+
+
+opencode -s ses_15fac5c49ffeuYwR0230K5o2j5
+
+You're using fish shell. Use the fish-compatible activate script:
+cd /home/ken/Bankmgmt/backend
+python3.12 -m venv /tmp/bank_venv
+source /tmp/bank_venv/bin/activate.fish
+pip install -r requirements.txt
+python run.py
+Then in another terminal:
+cd /home/ken/Bankmgmt/frontend
+npm run dev

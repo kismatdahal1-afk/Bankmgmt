@@ -37,7 +37,6 @@ export default function UserLayout() {
           <li><NavLink to="/user/transfer"><span className="material-symbols-rounded">send_money</span>Transfer</NavLink></li>
           <li><NavLink to="/user/transactions"><span className="material-symbols-rounded">receipt_long</span>Transactions</NavLink></li>
           <li><NavLink to="/user/my-loans"><span className="material-symbols-rounded">request_quote</span>Loans</NavLink></li>
-          <li><NavLink to="/user/emi-status"><span className="material-symbols-rounded">calendar_month</span>EMI Status</NavLink></li>
           <li><NavLink to="/user/notifications"><span className="material-symbols-rounded">notifications</span>Notifications</NavLink></li>
           <li><NavLink to="/user/profile"><span className="material-symbols-rounded">person</span>Profile</NavLink></li>
         </ul>

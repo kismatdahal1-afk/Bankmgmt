@@ -1108,6 +1108,28 @@ def api_customer_dashboard():
     total_loan_amount = sum((l.amount or Decimal('0')) for l in active_loans)
     total_loan_paid = sum((l.total_paid or Decimal('0')) for l in active_loans)
     total_loan_remaining = total_loan_amount - total_loan_paid
+    next_emi_date = None
+    next_emi_amount = None
+    upcoming_emi_count = 0
+    if active_loans:
+        upcoming_emi_count = sum(1 for l in active_loans if l.total_payable - l.total_paid > 0)
+        loan_with_nearest = None
+        nearest_days = None
+        for l in active_loans:
+            if l.total_payable - l.total_paid <= 0:
+                continue
+            repay_count = len(l.repayments) if l.repayments else 0
+            base = l.last_payment_date or l.approved_date
+            if base:
+                due = base.replace(day=1) + datetime.timedelta(days=32)
+                due = due.replace(day=1) + datetime.timedelta(days=repay_count * 31 - 1)
+                days_diff = (due - _utcnow()).days
+                if nearest_days is None or abs(days_diff) < abs(nearest_days):
+                    nearest_days = days_diff
+                    loan_with_nearest = l
+                    next_emi_date = due.date().isoformat()
+        if loan_with_nearest:
+            next_emi_amount = float(loan_with_nearest.emi)
     today = _utcnow().date()
     dates = [today - datetime.timedelta(days=i) for i in range(6, -1, -1)]
     date_labels = [d.strftime('%b %d') for d in dates]
@@ -1136,6 +1158,9 @@ def api_customer_dashboard():
         'total_loan_amount': float(total_loan_amount),
         'total_loan_paid': float(total_loan_paid),
         'total_loan_remaining': float(max(0, total_loan_remaining)),
+        'next_emi_date': next_emi_date,
+        'next_emi_amount': next_emi_amount,
+        'upcoming_emi_count': upcoming_emi_count,
         'recent_transactions': [_serialize_transaction(t) for t in recent],
         'date_labels': date_labels,
         'daily_deposits': daily_deposits,
@@ -1402,7 +1427,22 @@ def api_customer_transactions():
     if not customer:
         return jsonify({'error': 'Customer not found'}), 404
     account_ids = [acc.id for acc in Account.query.filter_by(customer_id=customer.id).all()]
-    transactions = Transaction.query.filter(Transaction.account_id.in_(account_ids)).order_by(Transaction.created_at.desc()).all()
+    if not account_ids:
+        return jsonify({'transactions': []})
+    q = Transaction.query.filter(Transaction.account_id.in_(account_ids))
+    txn_type = request.args.get('type')
+    if txn_type:
+        q = q.filter(Transaction.type == txn_type)
+    status = request.args.get('status')
+    if status:
+        q = q.filter(Transaction.status == status)
+    date_from = request.args.get('date_from')
+    if date_from:
+        q = q.filter(Transaction.created_at >= datetime.datetime.strptime(date_from, '%Y-%m-%d'))
+    date_to = request.args.get('date_to')
+    if date_to:
+        q = q.filter(Transaction.created_at <= datetime.datetime.strptime(date_to + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+    transactions = q.order_by(Transaction.created_at.desc()).limit(200).all()
     return jsonify({'transactions': [_serialize_transaction(t) for t in transactions]})
 
 @api_bp.route('/customer/profile', methods=['GET'])

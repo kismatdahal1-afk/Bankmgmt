@@ -86,7 +86,7 @@ export default function UserDashboard() {
           <div className="page-title">Welcome back, {(data?.customer?.full_name || customer?.name || '').split(' ')[0]}</div>
           <div className="page-subtitle">Here's a snapshot of your finances today.</div>
         </div>
-        <Link to="/user/transactions" className="btn">
+        <Link to="/user/transactions" className="btn btn-secondary">
           <span className="material-symbols-rounded">receipt_long</span> View Ledger
         </Link>
       </div>
@@ -121,7 +121,7 @@ export default function UserDashboard() {
         <div className="card" style={{ marginBottom: '22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div className="card-title" style={{ margin: 0 }}>Loan Summary</div>
-            <Link to="/user/my-loans" className="btn btn-sm">View Loans</Link>
+            <Link to="/user/my-loans" className="btn btn-sm btn-secondary">View Loans</Link>
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div>
@@ -136,6 +136,14 @@ export default function UserDashboard() {
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Remaining</span>
               <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--warning)' }}>{formatCurrency(data?.total_loan_remaining || 0)}</div>
             </div>
+            {data?.next_emi_date && (
+              <div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Next EMI</span>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
+                  {formatCurrency(data.next_emi_amount)} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-secondary)' }}>on {new Date(data.next_emi_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </div>
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: '120px' }}>
               <div style={{ height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden', marginTop: '16px' }}>
                 <div style={{ width: `${calculateProgress(data?.total_loan_paid, data?.total_loan_amount)}%`, height: '100%', background: 'var(--success)', borderRadius: '3px' }} />
@@ -148,7 +156,7 @@ export default function UserDashboard() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <div className="card-title" style={{ margin: 0 }}>Recent Transactions</div>
-          <Link to="/user/transactions" className="btn btn-sm">See all</Link>
+          <Link to="/user/transactions" className="btn btn-sm btn-secondary">See all</Link>
         </div>
 
         <div className="table-container" style={{ background: 'transparent', border: 'none' }}>

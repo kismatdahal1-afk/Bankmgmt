@@ -40,7 +40,6 @@ import UserMyBalance from '../pages/user/MyBalance'
 import UserMyLoans from '../pages/user/MyLoans'
 import UserApplyLoan from '../pages/user/ApplyLoan'
 import FundTransfer from '../pages/user/FundTransfer'
-import UserEMIStatus from '../pages/user/EMIStatus'
 import UserTransactions from '../pages/user/Transactions'
 import UserNotifications from '../pages/user/Notifications'
 import UserProfile from '../pages/user/Profile'
@@ -97,7 +96,6 @@ export default function AppRoutes() {
         <Route path="my-balance" element={<UserMyBalance />} />
         <Route path="my-loans" element={<UserMyLoans />} />
         <Route path="loans/apply" element={<UserApplyLoan />} />
-        <Route path="emi-status" element={<UserEMIStatus />} />
         <Route path="transfer" element={<FundTransfer />} />
         <Route path="transactions" element={<UserTransactions />} />
         <Route path="notifications" element={<UserNotifications />} />
