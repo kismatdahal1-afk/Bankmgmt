@@ -31,24 +31,24 @@ def log_audit(action, resource_type=None, resource_id=None, description=None, st
     db.session.flush()
     return log
 
-def create_notification(title, message, type='info', user_id=None, customer_id=None):
+def create_notification(title, message, notification_type='info', user_id=None, customer_id=None):
     """Create a notification for a user or customer."""
     notif = Notification(
         user_id=user_id,
         customer_id=customer_id,
         title=title,
         message=message,
-        type=type,
+        type=notification_type,
         is_read=False
     )
     db.session.add(notif)
     db.session.flush()
     return notif
 
-def notify_customer(customer_id, title, message, type='info'):
+def notify_customer(customer_id, title, message, notification_type='info'):
     """Helper to notify a customer."""
-    return create_notification(title=title, message=message, type=type, customer_id=customer_id)
+    return create_notification(title=title, message=message, notification_type=notification_type, customer_id=customer_id)
 
-def notify_staff(user_id, title, message, type='info'):
+def notify_staff(user_id, title, message, notification_type='info'):
     """Helper to notify a staff/admin user."""
-    return create_notification(title=title, message=message, type=type, user_id=user_id)
+    return create_notification(title=title, message=message, notification_type=notification_type, user_id=user_id)

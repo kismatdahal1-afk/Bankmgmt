@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, g
+from extensions import limiter
 from database.db import db
 from models import User
 from middleware.authentication import login_required
@@ -16,6 +17,7 @@ def load_logged_in_user():
             session.clear()
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=['POST'])
 def login():
     if session.get('user_id'):
         return redirect(url_for('reports.dashboard'))

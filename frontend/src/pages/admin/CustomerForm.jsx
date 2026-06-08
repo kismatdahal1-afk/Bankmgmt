@@ -16,7 +16,7 @@ export default function AdminCustomerForm() {
       fetch(`/api/customers/${id}`)
         .then(r => r.json())
         .then(d => setCustomer(d.customer || d))
-        .catch(() => {})
+        .catch(err => console.error('Fetch error:', err))
     }
   }, [id, isEdit])
 

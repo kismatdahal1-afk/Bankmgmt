@@ -79,7 +79,7 @@ def approve_loan(loan_id):
         flash("Loan is already processed.", "warning")
         return redirect(url_for('loan.loans_list'))
 
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
     if not active_account:
         flash("Disbursement Failed: The customer does not have an active savings/current account.", "danger")
         return redirect(url_for('loan.loans_list'))
@@ -101,7 +101,7 @@ def approve_loan(loan_id):
         db.session.add(txn)
         db.session.commit()
 
-        flash(f"Loan #{loan.loan_number} approved! Funds of  disbursed to Account #{active_account.account_number}.", "success")
+        flash(f"Loan #{loan.loan_number} approved! Funds of {loan.amount} disbursed to Account #{active_account.account_number}.", "success")
     except Exception as e:
         db.session.rollback()
         flash(f"Approval process failed: {str(e)}", "danger")
@@ -135,7 +135,7 @@ def repay_loan(loan_id):
         return redirect(url_for('loan.loans_list'))
 
     remaining_balance = loan.total_payable - loan.total_paid
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
 
     if request.method == 'POST':
         amount_str = request.form.get('amount')
@@ -152,7 +152,7 @@ def repay_loan(loan_id):
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
 
             if amount > remaining_balance + Decimal('0.01'):
-                flash(f"Repayment amount exceeds remaining loan balance ().", "danger")
+                flash(f"Repayment amount exceeds remaining loan balance ({remaining_balance}).", "danger")
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
         except Exception:
             flash("Invalid numeric repayment amount.", "danger")
@@ -163,7 +163,7 @@ def repay_loan(loan_id):
                 flash("Customer does not have an active bank account to debit from.", "danger")
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
             if active_account.balance < amount:
-                flash(f"Insufficient account balance. Available: .", "danger")
+                flash(f"Insufficient account balance. Available: {active_account.balance}.", "danger")
                 return render_template('repay_form.html', loan=loan, remaining_balance=remaining_balance, active_account=active_account)
 
         try:
@@ -193,7 +193,7 @@ def repay_loan(loan_id):
             db.session.add(repay_record)
             db.session.commit()
 
-            flash(f"Successfully recorded repayment of  against Loan #{loan.loan_number}.", "success")
+            flash(f"Successfully recorded repayment of {amount} against Loan #{loan.loan_number}.", "success")
             return redirect(url_for('loan.loans_list'))
         except Exception as e:
             db.session.rollback()

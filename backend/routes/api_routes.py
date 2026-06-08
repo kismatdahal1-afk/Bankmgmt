@@ -3,6 +3,8 @@ import functools
 import uuid
 from decimal import Decimal
 from flask import Blueprint, request, jsonify, session, g
+from sqlalchemy.orm import joinedload, subqueryload
+from extensions import limiter
 from database.db import db
 from models import User, Customer, Account, Transaction, Loan, Repayment, Notification, AuditLog
 from utils.helpers import generate_customer_id, generate_username, generate_temporary_password, generate_account_number
@@ -95,7 +97,6 @@ def _simple_customer(c):
         'full_name': c.full_name,
         'phone_number': c.phone_number,
         'citizenship_id': c.citizenship_id,
-        'accounts': [_simple_account(a) for a in c.accounts] if c.accounts else []
     }
 
 def _simple_account(a):
@@ -129,16 +130,18 @@ def _compute_loan_overdue(l):
     if l.approved_date:
         months_elapsed = (now.year - l.approved_date.year) * 12 + (now.month - l.approved_date.month)
         expected_emis_paid = min(months_elapsed, l.duration_months)
-        expected_min_paid = expected_emis_paid * float(l.emi or 0)
-        if float(l.total_paid) < expected_min_paid * Decimal('0.5'):
+        expected_min_paid = Decimal(str(expected_emis_paid)) * Decimal(str(l.emi or 0))
+        if Decimal(str(l.total_paid)) < expected_min_paid * Decimal('0.5'):
             return True
     return l.last_payment_date and (now - l.last_payment_date).days > 60
 
 def _compute_remaining_emis(l):
-    if not l.emi or float(l.emi) <= 0:
+    emi = l.emi
+    if not emi or emi <= 0:
         return 0
-    remaining = float(l.total_payable) - float(l.total_paid)
-    return max(0, int(remaining / float(l.emi)) + (1 if remaining % float(l.emi) > 0 else 0))
+    remaining = Decimal(str(l.total_payable)) - Decimal(str(l.total_paid))
+    emi = Decimal(str(emi))
+    return max(0, int(remaining / emi) + (1 if remaining % emi > 0 else 0))
 
 def _serialize_loan(l):
     overdue = _compute_loan_overdue(l)
@@ -175,6 +178,7 @@ def _serialize_loan(l):
 # ===== AUTH ENDPOINTS =====
 
 @api_bp.route('/auth/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def api_login():
     data = request.get_json(silent=True) or request.form
     username = (data.get('username') or '').strip()
@@ -189,6 +193,7 @@ def api_login():
     session['username'] = user.username
     session['role'] = user.role
     log_audit('login', 'auth', user.id, f'User {user.username} ({user.role}) logged in')
+    db.session.commit()
     return jsonify({
         'user_id': user.id,
         'username': user.username,
@@ -199,10 +204,12 @@ def api_login():
 def api_logout():
     if 'user_id' in session:
         log_audit('logout', 'auth', session.get('user_id'), f'User {session.get("username")} logged out')
+        db.session.commit()
     session.clear()
     return jsonify({'message': 'Logged out successfully'})
 
 @api_bp.route('/customer/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def api_customer_login():
     data = request.get_json(silent=True) or request.form
     username = (data.get('username') or '').strip()
@@ -216,6 +223,7 @@ def api_customer_login():
     session['customer_id'] = customer.id
     session['customer_name'] = customer.full_name
     log_audit('customer_login', 'auth', customer.id, f'Customer {customer.full_name} logged in')
+    db.session.commit()
     return jsonify({
         'customer_id': customer.id,
         'customer_name': customer.full_name,
@@ -230,6 +238,7 @@ def api_customer_login():
 def api_customer_logout():
     if 'customer_id' in session:
         log_audit('customer_logout', 'auth', session.get('customer_id'), f'Customer {session.get("customer_name")} logged out')
+        db.session.commit()
     session.clear()
     return jsonify({'message': 'Logged out successfully'})
 
@@ -238,7 +247,7 @@ def api_customer_logout():
 @api_bp.route('/customers/', methods=['GET'])
 @staff_or_admin_required
 def api_list_customers():
-    customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    customers = Customer.query.options(joinedload(Customer.accounts)).order_by(Customer.created_at.desc()).all()
     return jsonify({'customers': [_serialize_customer(c) for c in customers]})
 
 @api_bp.route('/customers/<int:customer_id>', methods=['GET'])
@@ -250,7 +259,7 @@ def api_get_customer(customer_id):
 @api_bp.route('/customers/create', methods=['POST'])
 @staff_or_admin_required
 def api_create_customer():
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     full_name = (data.get('full_name') or '').strip()
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
@@ -300,7 +309,7 @@ def api_create_customer():
             try:
                 dob = datetime.datetime.strptime(dob_str, '%Y-%m-%d').date()
             except ValueError:
-                pass
+                return jsonify({'error': 'Invalid date format for DOB. Use YYYY-MM-DD.'}), 400
 
         customer = Customer(
             customer_id=customer_id_str,
@@ -316,7 +325,7 @@ def api_create_customer():
             phone_number=phone_number,
             alternate_mobile=(data.get('alternate_mobile') or '').strip() or None,
             email=(data.get('email') or '').strip() or None,
-            address=(data.get('address') or '').strip() or full_name,
+            address=(data.get('address') or '').strip() or None,
             permanent_address=(data.get('permanent_address') or '').strip() or None,
             temporary_address=(data.get('temporary_address') or '').strip() or None,
             nominee_name=(data.get('nominee_name') or '').strip() or None,
@@ -330,13 +339,16 @@ def api_create_customer():
         db.session.flush()
 
         account_type = data.get('account_type') or 'savings'
+        valid_types = ['savings', 'current', 'fixed_deposit']
+        if account_type not in valid_types:
+            return jsonify({'error': f'Invalid account type. Must be one of: {", ".join(valid_types)}'}), 400
         initial_balance = Decimal('0.00')
         try:
             initial_balance = Decimal(str(data.get('initial_balance', '0')))
             if initial_balance < 0:
                 initial_balance = Decimal('0.00')
-        except Exception:
-            pass
+        except (ValueError, TypeError, ArithmeticError):
+            initial_balance = Decimal('0.00')
 
         new_account = Account(
             customer_id=customer.id,
@@ -357,11 +369,11 @@ def api_create_customer():
             )
             db.session.add(txn)
 
-        db.session.commit()
-
         log_audit('customer_created', 'customer', customer.id, f'Customer {full_name} created with account {account_num}')
         notify_customer(customer.id, 'Welcome to Village Bank',
             f'Dear {full_name}, your account has been created. Username: {username}. Please log in and change your password.')
+
+        db.session.commit()
 
         return jsonify({
             'message': 'Customer created successfully',
@@ -381,7 +393,7 @@ def api_create_customer():
 @staff_or_admin_required
 def api_edit_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     full_name = (data.get('full_name') or '').strip()
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
@@ -407,7 +419,7 @@ def api_edit_customer(customer_id):
         try:
             dob = datetime.datetime.strptime(dob_str, '%Y-%m-%d').date()
         except ValueError:
-            pass
+            return jsonify({'error': 'Invalid date format for DOB. Use YYYY-MM-DD.'}), 400
 
     customer.full_name = full_name
     customer.father_name = (data.get('father_name') or '').strip() or customer.father_name
@@ -428,8 +440,8 @@ def api_edit_customer(customer_id):
     customer.nominee_contact = (data.get('nominee_contact') or '').strip() or customer.nominee_contact
     customer.nominee_relationship = (data.get('nominee_relationship') or '').strip() or customer.nominee_relationship
 
-    db.session.commit()
     log_audit('customer_updated', 'customer', customer_id, f'Customer {customer.full_name} profile updated')
+    db.session.commit()
     return jsonify({'message': 'Customer updated successfully', 'customer': _serialize_customer(customer)})
 
 @api_bp.route('/customers/delete/<int:customer_id>', methods=['POST'])
@@ -441,8 +453,8 @@ def api_delete_customer(customer_id):
     customer.status = 'inactive'
     for account in customer.accounts:
         account.status = 'closed'
-    db.session.commit()
     log_audit('customer_deactivated', 'customer', customer_id, f'Customer {customer.full_name} deactivated (set inactive)')
+    db.session.commit()
     return jsonify({'message': 'Customer account closed successfully'})
 
 # ===== ACCOUNT ENDPOINTS =====
@@ -450,7 +462,7 @@ def api_delete_customer(customer_id):
 @api_bp.route('/accounts/', methods=['GET'])
 @staff_or_admin_required
 def api_list_accounts():
-    accounts = Account.query.order_by(Account.created_at.desc()).all()
+    accounts = Account.query.options(joinedload(Account.customer)).order_by(Account.created_at.desc()).all()
     return jsonify({'accounts': [_serialize_account(a) for a in accounts]})
 
 @api_bp.route('/accounts/<account_number>', methods=['GET'])
@@ -462,12 +474,19 @@ def api_get_account(account_number):
 @api_bp.route('/accounts/create', methods=['POST'])
 @staff_or_admin_required
 def api_create_account():
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     customer_id = data.get('customer_id')
     account_type = data.get('account_type', 'savings')
+    valid_types = ['savings', 'current', 'fixed_deposit']
+    if account_type not in valid_types:
+        return jsonify({'error': f'Invalid account type. Must be one of: {", ".join(valid_types)}'}), 400
     if not customer_id:
         return jsonify({'error': 'Customer ID is required'}), 400
-    customer = Customer.query.get(int(customer_id))
+    try:
+        customer_id = int(customer_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid customer ID format'}), 400
+    customer = Customer.query.get(customer_id)
     if not customer:
         return jsonify({'error': 'Customer not found'}), 404
     acc_num = generate_account_number()
@@ -477,10 +496,10 @@ def api_create_account():
         account_type=account_type
     )
     db.session.add(account)
-    db.session.commit()
     log_audit('account_created', 'account', account.id, f'{account_type} account {acc_num} created for {customer.full_name}')
     notify_customer(customer.id, 'New Account Created',
         f'A new {account_type} account ({acc_num}) has been created for you.')
+    db.session.commit()
     return jsonify({'message': 'Account created', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/freeze/<int:account_id>', methods=['POST'])
@@ -490,8 +509,8 @@ def api_freeze_account(account_id):
     if account.status == 'closed':
         return jsonify({'error': 'Cannot freeze a closed account'}), 400
     account.status = 'frozen'
-    db.session.commit()
     log_audit('account_frozen', 'account', account_id, f'Account {account.account_number} frozen')
+    db.session.commit()
     return jsonify({'message': 'Account frozen', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/unfreeze/<int:account_id>', methods=['POST'])
@@ -501,8 +520,8 @@ def api_unfreeze_account(account_id):
     if account.status != 'frozen':
         return jsonify({'error': 'Account is not frozen'}), 400
     account.status = 'active'
-    db.session.commit()
     log_audit('account_unfrozen', 'account', account_id, f'Account {account.account_number} unfrozen')
+    db.session.commit()
     return jsonify({'message': 'Account unfrozen', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/close/<int:account_id>', methods=['POST'])
@@ -514,8 +533,8 @@ def api_close_account(account_id):
     if account.balance > 0:
         return jsonify({'error': 'Account has remaining balance. Withdraw funds first.'}), 400
     account.status = 'closed'
-    db.session.commit()
     log_audit('account_closed', 'account', account_id, f'Account {account.account_number} closed')
+    db.session.commit()
     return jsonify({'message': 'Account closed', 'account': _serialize_account(account)})
 
 # ===== TRANSACTION ENDPOINTS =====
@@ -523,13 +542,13 @@ def api_close_account(account_id):
 @api_bp.route('/transactions/', methods=['GET'])
 @staff_or_admin_required
 def api_list_transactions():
-    transactions = Transaction.query.order_by(Transaction.created_at.desc()).all()
+    transactions = Transaction.query.options(joinedload(Transaction.account).joinedload(Account.customer)).order_by(Transaction.created_at.desc()).all()
     return jsonify({'transactions': [_serialize_transaction(t) for t in transactions]})
 
 @api_bp.route('/transactions/deposit', methods=['POST'])
 @staff_or_admin_required
 def api_deposit():
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     account_number = data.get('account_number')
     amount_str = data.get('amount')
     description = data.get('description', '')
@@ -541,7 +560,7 @@ def api_deposit():
         return jsonify({'error': 'Invalid amount'}), 400
     if amount <= 0:
         return jsonify({'error': 'Amount must be greater than 0'}), 400
-    account = Account.query.filter_by(account_number=account_number, status='active').first()
+    account = Account.query.filter_by(account_number=account_number, status='active').with_for_update().first()
     if not account:
         return jsonify({'error': 'Account not found or not active'}), 404
     new_balance = account.balance + amount
@@ -560,16 +579,16 @@ def api_deposit():
         created_by=g.user.id if g.user else None
     )
     db.session.add(txn)
-    db.session.commit()
     log_audit('deposit', 'transaction', txn.id, f'Deposit of {amount} to account {account_number}. Ref: {txn.reference_number}')
     notify_customer(account.customer_id, 'Deposit Successful',
         f'NPR {float(amount):,.2f} has been deposited to account {account_number}. Balance: NPR {float(new_balance):,.2f}')
+    db.session.commit()
     return jsonify({'message': 'Deposit successful', 'transaction': _serialize_transaction(txn)})
 
 @api_bp.route('/transactions/withdraw', methods=['POST'])
 @staff_or_admin_required
 def api_withdraw():
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     account_number = data.get('account_number')
     amount_str = data.get('amount')
     description = data.get('description', '')
@@ -581,7 +600,7 @@ def api_withdraw():
         return jsonify({'error': 'Invalid amount'}), 400
     if amount <= 0:
         return jsonify({'error': 'Amount must be greater than 0'}), 400
-    account = Account.query.filter_by(account_number=account_number, status='active').first()
+    account = Account.query.filter_by(account_number=account_number, status='active').with_for_update().first()
     if not account:
         return jsonify({'error': 'Account not found'}), 404
     if account.balance < amount:
@@ -602,10 +621,10 @@ def api_withdraw():
         created_by=g.user.id if g.user else None
     )
     db.session.add(txn)
-    db.session.commit()
     log_audit('withdrawal', 'transaction', txn.id, f'Withdrawal of {amount} from account {account_number}. Ref: {txn.reference_number}')
     notify_customer(account.customer_id, 'Withdrawal Successful',
         f'NPR {float(amount):,.2f} has been withdrawn from account {account_number}. Balance: NPR {float(new_balance):,.2f}')
+    db.session.commit()
     return jsonify({'message': 'Withdrawal successful', 'transaction': _serialize_transaction(txn)})
 
 @api_bp.route('/transactions/filter', methods=['GET'])
@@ -640,7 +659,7 @@ def api_filter_transactions():
 @api_bp.route('/loans/', methods=['GET'])
 @staff_or_admin_required
 def api_list_loans():
-    loans = Loan.query.order_by(Loan.applied_date.desc()).all()
+    loans = Loan.query.options(joinedload(Loan.customer), subqueryload(Loan.repayments)).order_by(Loan.applied_date.desc()).all()
     return jsonify({'loans': [_serialize_loan(l) for l in loans]})
 
 @api_bp.route('/loans/<int:loan_id>', methods=['GET'])
@@ -652,7 +671,7 @@ def api_get_loan(loan_id):
 @api_bp.route('/loans/apply', methods=['POST'])
 @staff_or_admin_required
 def api_apply_loan():
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     customer_id_str = data.get('customer_id')
     amount_str = data.get('amount')
     interest_rate_str = data.get('interest_rate')
@@ -693,7 +712,7 @@ def api_approve_loan(loan_id):
     loan = Loan.query.get_or_404(loan_id)
     if loan.status != 'pending':
         return jsonify({'error': 'Loan already processed'}), 400
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
     if not active_account:
         return jsonify({'error': 'Customer has no active account'}), 400
     try:
@@ -712,10 +731,10 @@ def api_approve_loan(loan_id):
             created_by=session.get('user_id')
         )
         db.session.add(txn)
-        db.session.commit()
         log_audit('loan_approved', 'loan', loan.id, f'Loan {loan.loan_number} for NPR {float(loan.amount):,.2f} approved and disbursed')
         notify_customer(loan.customer_id, 'Loan Approved',
             f'Your loan {loan.loan_number} of NPR {float(loan.amount):,.2f} has been approved and disbursed to your account.')
+        db.session.commit()
         return jsonify({'message': 'Loan approved and disbursed', 'loan': _serialize_loan(loan)})
     except Exception as e:
         db.session.rollback()
@@ -730,10 +749,10 @@ def api_reject_loan(loan_id):
     if loan.status != 'pending':
         return jsonify({'error': 'Loan already processed'}), 400
     loan.status = 'rejected'
-    db.session.commit()
     log_audit('loan_rejected', 'loan', loan.id, f'Loan {loan.loan_number} for {loan.customer.full_name} rejected')
     notify_customer(loan.customer_id, 'Loan Application Update',
         f'Your loan application {loan.loan_number} has been reviewed and was not approved at this time.')
+    db.session.commit()
     return jsonify({'message': 'Loan rejected', 'loan': _serialize_loan(loan)})
 
 @api_bp.route('/loans/repay/<int:loan_id>', methods=['POST'])
@@ -742,7 +761,7 @@ def api_repay_loan(loan_id):
     loan = Loan.query.get_or_404(loan_id)
     if loan.status != 'approved':
         return jsonify({'error': 'Loan is not active'}), 400
-    data = request.form
+    data = request.get_json(silent=True) or request.form
     amount_str = data.get('amount')
     payment_method = data.get('payment_method', 'cash')
     if not amount_str:
@@ -756,7 +775,7 @@ def api_repay_loan(loan_id):
     remaining = loan.total_payable - loan.total_paid
     if amount > remaining:
         return jsonify({'error': 'Amount exceeds remaining balance'}), 400
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
     if payment_method == 'account':
         if not active_account:
             return jsonify({'error': 'No active account for deduction'}), 400
@@ -791,10 +810,10 @@ def api_repay_loan(loan_id):
             received_by=session.get('user_id')
         )
         db.session.add(repay)
-        db.session.commit()
         log_audit('emi_collection', 'repayment', repay.id, f'EMI #{emi_cnt} of NPR {float(amount):,.2f} collected for loan {loan.loan_number}')
         notify_customer(loan.customer_id, 'EMI Payment Received',
             f'EMI #{emi_cnt} of NPR {float(amount):,.2f} received for loan {loan.loan_number}.')
+        db.session.commit()
         return jsonify({'message': 'Repayment recorded', 'loan': _serialize_loan(loan)})
     except Exception as e:
         db.session.rollback()
@@ -1032,9 +1051,13 @@ def api_create_staff():
     data = request.get_json(silent=True) or request.form
     username = (data.get('username') or '').strip()
     password = data.get('password', '')
-    role = data.get('role', 'staff')
     if not username or not password:
         return jsonify({'error': 'Username and password required'}), 400
+    role = data.get('role', 'staff')
+    if role not in ('admin', 'staff'):
+        return jsonify({'error': 'Role must be admin or staff'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
     user = User(username=username, role=role)
@@ -1215,8 +1238,8 @@ def api_list_notifications():
             'created_at': n.created_at.isoformat() if n.created_at else None
         } for n in notifications],
         'unread_count': Notification.query.filter_by(is_read=False).filter(
-            (Notification.customer_id == session.get('customer_id')) |
-            (Notification.user_id == session.get('user_id'))
+            *([Notification.customer_id == session['customer_id']] if 'customer_id' in session else []),
+            *([Notification.user_id == session['user_id']] if 'user_id' in session else [])
         ).count()
     })
 

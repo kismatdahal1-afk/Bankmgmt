@@ -7,14 +7,10 @@ export default function TransactionForm({ action, accounts, selectedAccountNum, 
         <form onSubmit={onSubmit}>
           <div className="form-group">
             <label htmlFor="account_number">Select Target Account</label>
-            <select id="account_number" name="account_number" className="form-control" required>
-              <option value="" disabled selected={!selectedAccountNum}>-- Choose Account --</option>
+            <select id="account_number" name="account_number" className="form-control" required defaultValue={selectedAccountNum || ''}>
+              <option value="" disabled>-- Choose Account --</option>
               {accounts?.map((acc) => (
-                <option
-                  key={acc.account_number}
-                  value={acc.account_number}
-                  selected={selectedAccountNum === acc.account_number}
-                >
+                <option key={acc.account_number} value={acc.account_number}>
                   {acc.customer?.full_name || 'Unknown'} (Acc: {acc.account_number} - Bal: {'NPR ' + parseFloat(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })})
                 </option>
               ))}

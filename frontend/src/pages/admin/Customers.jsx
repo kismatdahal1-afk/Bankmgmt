@@ -86,12 +86,16 @@ export default function AdminCustomers() {
                       <Link to={`/admin/customers/edit/${customer.id}`} className="btn btn-secondary btn-sm" style={{ padding: '6px' }} title="Edit Profile">
                         <span className="material-symbols-rounded" style={{ fontSize: '1.1rem' }}>edit</span>
                       </Link>
-                      <form method="POST" action={`/api/customers/delete/${customer.id}`} style={{ margin: 0 }}
-                        onSubmit={(e) => { if (!confirm('Are you sure you want to close this customer account?')) e.preventDefault() }}>
-                        <button type="submit" className="btn btn-danger btn-sm" style={{ padding: '6px', backgroundColor: '#4b5563' }} title="Close Account">
-                          <span className="material-symbols-rounded" style={{ fontSize: '1.1rem' }}>person_remove</span>
-                        </button>
-                      </form>
+                      <button className="btn btn-danger btn-sm" style={{ padding: '6px', backgroundColor: '#4b5563' }} title="Close Account"
+                        onClick={async () => {
+                          if (!confirm('Are you sure you want to close this customer account?')) return
+                          try {
+                            const res = await fetch(`/api/customers/delete/${customer.id}`, { method: 'POST', credentials: 'include' })
+                            if (res.ok) { window.location.reload() }
+                          } catch {}
+                        }}>
+                        <span className="material-symbols-rounded" style={{ fontSize: '1.1rem' }}>person_remove</span>
+                      </button>
                     </div>
                   </td>
                 </tr>

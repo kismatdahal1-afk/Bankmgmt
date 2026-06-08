@@ -29,13 +29,12 @@ def deposit():
             flash('Amount must be greater than 0', 'danger')
             return redirect(url_for('transaction.deposit'))
 
-        account = Account.query.filter_by(account_number=account_number, status='active').first()
+        account = Account.query.filter_by(account_number=account_number, status='active').with_for_update().first()
         if not account:
             flash('Account not found', 'danger')
             return redirect(url_for('transaction.deposit'))
 
-        old_balance = account.balance
-        new_balance = old_balance + amount
+        new_balance = account.balance + amount
         account.balance = new_balance
 
         transaction = Transaction(
@@ -50,7 +49,7 @@ def deposit():
         db.session.add(transaction)
         db.session.commit()
 
-        flash(f'Successfully deposited  to account {account_number}', 'success')
+        flash(f'Successfully deposited {amount} to account {account_number}', 'success')
         return redirect(url_for('transaction.transactions_list'))
 
     accounts = Account.query.filter_by(status='active').all()
@@ -79,17 +78,16 @@ def withdraw():
             flash('Amount must be greater than 0', 'danger')
             return redirect(url_for('transaction.withdraw'))
 
-        account = Account.query.filter_by(account_number=account_number, status='active').first()
+        account = Account.query.filter_by(account_number=account_number, status='active').with_for_update().first()
         if not account:
             flash('Account not found', 'danger')
             return redirect(url_for('transaction.withdraw'))
 
         if account.balance < amount:
-            flash(f'Insufficient funds. Available balance: ', 'danger')
+            flash(f'Insufficient funds. Available balance: {account.balance}', 'danger')
             return redirect(url_for('transaction.withdraw'))
 
-        old_balance = account.balance
-        new_balance = old_balance - amount
+        new_balance = account.balance - amount
         account.balance = new_balance
 
         transaction = Transaction(
@@ -104,7 +102,7 @@ def withdraw():
         db.session.add(transaction)
         db.session.commit()
 
-        flash(f'Successfully withdrew  from account {account_number}', 'success')
+        flash(f'Successfully withdrew {amount} from account {account_number}', 'success')
         return redirect(url_for('transaction.transactions_list'))
 
     accounts = Account.query.filter_by(status='active').all()

@@ -14,7 +14,7 @@ export default function AdminTransactionForm() {
     fetch('/api/accounts/')
       .then(r => r.json())
       .then(d => setAccounts(d.accounts || d))
-      .catch(() => {})
+      .catch(err => console.error('Fetch error:', err))
   }, [])
 
   const handleSubmit = async (e) => {

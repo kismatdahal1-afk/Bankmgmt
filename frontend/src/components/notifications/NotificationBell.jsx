@@ -14,7 +14,7 @@ export default function NotificationBell() {
         setUnread(d.unread_count || 0)
         setItems((d.notifications || []).slice(0, 5))
       })
-      .catch(() => {})
+      .catch(err => console.error('Fetch error:', err))
   }
 
   useEffect(() => {

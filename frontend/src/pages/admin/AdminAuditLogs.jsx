@@ -26,8 +26,8 @@ export default function AdminAuditLogs() {
   }
 
   useEffect(() => {
-    fetch('/api/audit-logs/actions').then(r => r.json()).then(d => setActions(d.actions || [])).catch(() => {})
-    fetch('/api/audit-logs/summary').then(r => r.json()).then(d => setSummary(d)).catch(() => {})
+    fetch('/api/audit-logs/actions').then(r => r.json()).then(d => setActions(d.actions || [])).catch(err => console.error('Fetch error:', err))
+    fetch('/api/audit-logs/summary').then(r => r.json()).then(d => setSummary(d)).catch(err => console.error('Fetch error:', err))
     fetchLogs()
   }, [])
 

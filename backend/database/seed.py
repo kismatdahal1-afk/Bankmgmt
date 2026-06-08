@@ -30,9 +30,9 @@ def init_database():
         else:
             print("Staff user already exists.")
 
-        sample_customer = Customer.query.filter_by(username='john').first()
+        sample_customer = Customer.query.filter_by(citizenship_id='AADHR-1234-5678').first()
         if not sample_customer:
-            print("Seeding sample customer (john/password123)...")
+            print("Seeding sample customer with username/password123...")
             customer_id_str = generate_customer_id()
             username = generate_username()
             temp_pass = generate_temporary_password()
