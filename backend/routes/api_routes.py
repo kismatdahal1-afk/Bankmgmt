@@ -253,7 +253,8 @@ def api_customer_login():
             log_audit('customer_login_failed', 'auth', None, f'Failed customer login: {username}', 'failure')
             db.session.commit()
             return jsonify({'error': 'Invalid username or password'}), 401
-        session.clear()
+        for k in ['customer_id', 'customer_name']:
+            session.pop(k, None)
         session['customer_id'] = customer.id
         session['customer_name'] = customer.full_name
         log_audit('customer_login', 'auth', customer.id, f'Customer {customer.full_name} logged in')

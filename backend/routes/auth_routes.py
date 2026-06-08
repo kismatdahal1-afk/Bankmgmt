@@ -14,7 +14,8 @@ def load_logged_in_user():
     else:
         g.user = db.session.get(User, user_id)
         if g.user is None:
-            session.clear()
+            for k in ['user_id', 'username', 'role']:
+                session.pop(k, None)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", methods=['POST'])
