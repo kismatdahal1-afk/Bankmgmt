@@ -10,7 +10,6 @@ export default function NotificationItem({ notification, onMarkRead }) {
       justifyContent: 'space-between',
       alignItems: 'center',
       gap: '12px',
-      opacity: notification.read ? 0.7 : 1
     }}>
       <div style={{ flex: 1 }}>
         <p style={{ color: '#fff', fontWeight: notification.read ? 400 : 600, marginBottom: '4px' }}>

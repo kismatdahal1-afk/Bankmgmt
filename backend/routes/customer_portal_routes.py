@@ -2,6 +2,7 @@ import functools
 from decimal import Decimal
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, g
+from extensions import limiter
 from database.db import db
 from models import Customer, Account, Transaction, Loan
 
@@ -29,6 +30,7 @@ def load_customer():
             session.clear()
 
 @customer_portal_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=['POST'])
 def login():
     if session.get('customer_id'):
         return redirect(url_for('customer_portal.dashboard'))
@@ -64,7 +66,7 @@ def dashboard():
     customer = g.customer
     accounts = Account.query.filter_by(customer_id=customer.id, status='active').all()
 
-    total_balance = sum((acc.balance or Decimal('0')) for acc in accounts)
+    total_balance = sum((acc.balance or Decimal('0.00')) for acc in accounts)
     total_deposits = Decimal('0')
     total_withdrawals = Decimal('0')
 

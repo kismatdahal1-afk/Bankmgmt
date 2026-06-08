@@ -246,6 +246,7 @@ export default function StaffAccounts() {
           </div>
         </div>
       )}
+      )}
 
       {credentials && <CredentialCard credentials={credentials} onClose={() => setCredentials(null)} />}
     </>

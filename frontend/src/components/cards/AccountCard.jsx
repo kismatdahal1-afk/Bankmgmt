@@ -33,6 +33,11 @@ export default function AccountCard({ account, onAction }) {
       </div>
       {onAction && account.status !== 'closed' && (
         <div style={{ display: 'flex', gap: '6px', marginTop: '12px', flexWrap: 'wrap' }}>
+          {account.status === 'pending' && (
+            <button onClick={() => onAction('activate', account.id)} className="btn btn-sm" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '14px' }}>check_circle</span> Activate
+            </button>
+          )}
           {account.status === 'active' && (
             <button onClick={() => onAction('freeze', account.id)} className="btn btn-sm" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
               <span className="material-symbols-rounded" style={{ fontSize: '14px' }}>ac_unit</span> Freeze

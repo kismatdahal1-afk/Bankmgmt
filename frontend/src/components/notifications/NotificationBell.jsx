@@ -14,7 +14,7 @@ export default function NotificationBell() {
         setUnread(d.unread_count || 0)
         setItems((d.notifications || []).slice(0, 5))
       })
-      .catch(() => {})
+      .catch(err => console.error('Fetch error:', err))
   }
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function NotificationBell() {
         )}
       </button>
       {open && (
-        <div style={{ position: 'absolute', right: '0', top: '100%', width: '340px', maxHeight: '400px', overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', zIndex: 1000, marginTop: '8px' }}>
+        <div style={{ position: 'absolute', right: '0', top: '100%', width: '340px', maxHeight: '400px', overflowY: 'auto', background: '#151a22', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', zIndex: 1000, marginTop: '8px' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 600, color: '#fff' }}>Notifications</span>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -76,7 +76,7 @@ export default function NotificationBell() {
             </div>
           ) : (
             items.map(n => (
-              <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', opacity: n.is_read ? 0.6 : 1 }}>
+              <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                   <div style={{ flex: 1 }}>
                     <p style={{ color: '#fff', fontWeight: n.is_read ? 400 : 600, margin: 0, fontSize: '0.85rem' }}>{n.message || n.title}</p>

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import NotificationBell from '../../components/notifications/NotificationBell'
@@ -6,6 +6,12 @@ import NotificationBell from '../../components/notifications/NotificationBell'
 export default function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString())
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString()), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -48,19 +54,10 @@ export default function AdminLayout() {
       <main className="main-content">
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
           <NotificationBell />
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }} id="current-time"></span>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{currentTime}</span>
         </div>
         <Outlet />
       </main>
-      <script>
-        {`function updateTime() {
-          const now = new Date();
-          const el = document.getElementById('current-time');
-          if (el) el.innerText = now.toLocaleString();
-        }
-        updateTime();
-        setInterval(updateTime, 1000);`}
-      </script>
     </div>
   )
 }

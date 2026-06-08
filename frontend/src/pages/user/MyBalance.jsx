@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import api from '../../services/api'
 import BalanceCard from '../../components/cards/BalanceCard'
 import AccountCard from '../../components/cards/AccountCard'
 import { formatCurrency } from '../../utils/helpers'
@@ -8,13 +9,8 @@ export default function UserMyBalance() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/accounts')
-      .then(r => r.json())
-      .then(d => {
-        const list = d.accounts || d
-        setAccounts(list)
-        setLoading(false)
-      })
+    api.get('/customer/accounts')
+      .then(r => { setAccounts(r.data.accounts || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 

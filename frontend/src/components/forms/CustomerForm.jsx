@@ -163,9 +163,15 @@ export default function CustomerForm({ action, customer, onSubmit }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="address">Permanent Address</label>
+            <label htmlFor="address">Address</label>
             <input type="text" id="address" name="address" className="form-control"
               defaultValue={customer?.address || ''} required placeholder="123 Main St, Village Name" />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="permanent_address">Permanent Address</label>
+            <input type="text" id="permanent_address" name="permanent_address" className="form-control"
+              defaultValue={customer?.permanent_address || ''} placeholder="Permanent address if different" />
           </div>
 
           <div className="form-group">

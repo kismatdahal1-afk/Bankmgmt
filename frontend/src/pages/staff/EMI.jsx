@@ -114,7 +114,7 @@ export default function StaffEMI() {
                   </td>
                   <td><StatusBadge status={status} /></td>
                   <td style={{ textAlign: 'right' }}>
-                    <button onClick={() => setSelectedLoan(loan)} className="btn btn-sm" style={{ padding: '4px 10px' }}>
+                    <button onClick={() => setSelectedLoan(loan)} className="btn btn-sm btn-secondary" style={{ padding: '4px 10px' }}>
                       <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>visibility</span>
                     </button>
                   </td>

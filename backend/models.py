@@ -82,7 +82,7 @@ class Account(db.Model):
     __tablename__ = 'accounts'
 
     id = db.Column(db.Integer, primary_key=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
     account_number = db.Column(db.String(20), unique=True, nullable=False)
     account_type = db.Column(db.String(20), nullable=False)
     balance = db.Column(db.Numeric(15, 2), default=Decimal('0.00'), nullable=False)
@@ -104,14 +104,14 @@ class Transaction(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     transaction_uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: f"TXN-{uuid.uuid4().hex[:12].upper()}")
-    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False, index=True)
     type = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Numeric(15, 2), nullable=False)
     balance_after = db.Column(db.Numeric(15, 2), nullable=False)
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='successful', nullable=False)
     reference_number = db.Column(db.String(50), nullable=True)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=_utcnow)
 
     def __repr__(self):
@@ -124,7 +124,7 @@ class Loan(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     loan_number = db.Column(db.String(20), unique=True, nullable=False, default=lambda: f"LN-{uuid.uuid4().hex[:12].upper()}")
-    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
     amount = db.Column(db.Numeric(15, 2), nullable=False) # Principal amount
     interest_rate = db.Column(db.Numeric(5, 2), nullable=False) # Annual interest rate (e.g. 12.00%)
     duration_months = db.Column(db.Integer, nullable=False)
@@ -149,7 +149,7 @@ class Repayment(db.Model):
     __tablename__ = 'repayments'
 
     id = db.Column(db.Integer, primary_key=True)
-    loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=False)
+    loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=False, index=True)
     amount = db.Column(db.Numeric(15, 2), nullable=False)
     emi_number = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), default='paid', nullable=False)
@@ -166,8 +166,8 @@ class Notification(db.Model):
     __tablename__ = 'notifications'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
     title = db.Column(db.String(200), nullable=False)
     message = db.Column(db.Text, nullable=False)
     type = db.Column(db.String(30), nullable=False, default='info')
@@ -183,8 +183,8 @@ class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
     username = db.Column(db.String(100), nullable=True)
     role = db.Column(db.String(20), nullable=True)
     action = db.Column(db.String(50), nullable=False)

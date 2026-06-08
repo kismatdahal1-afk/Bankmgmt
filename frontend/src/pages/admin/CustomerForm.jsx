@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import api from '../../services/api'
 import CustomerFormComponent from '../../components/forms/CustomerForm'
 import CredentialCard from '../../components/common/CredentialCard'
 
@@ -13,10 +14,9 @@ export default function AdminCustomerForm() {
 
   useEffect(() => {
     if (isEdit) {
-      fetch(`/api/customers/${id}`)
-        .then(r => r.json())
-        .then(d => setCustomer(d.customer || d))
-        .catch(() => {})
+      api.get(`/customers/${id}`)
+        .then(r => setCustomer(r.data.customer || r.data))
+        .catch(err => console.error('Fetch error:', err))
     }
   }, [id, isEdit])
 
@@ -42,9 +42,15 @@ export default function AdminCustomerForm() {
         } else {
           navigate('/admin/accounts')
         }
-      } catch (err) {
-        console.error(err)
+        } else {
+          navigate('/admin/accounts')
+        }
       }
+    } catch (err) {
+      if (err.response?.data?.error) {
+        alert(err.response.data.error)
+      }
+      console.error(err)
     }
   }
 

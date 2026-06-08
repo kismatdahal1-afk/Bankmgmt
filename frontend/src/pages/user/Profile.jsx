@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { getInitials, formatDate } from '../../utils/helpers'
+import api from '../../services/api'
+import { getInitials, formatDate, formatCurrency } from '../../utils/helpers'
 
 export default function UserProfile() {
   const { customer } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [accounts, setAccounts] = useState([])
   const [editMode, setEditMode] = useState(false)
   const [formData, setFormData] = useState({})
   const [saving, setSaving] = useState(false)
@@ -16,10 +18,9 @@ export default function UserProfile() {
   const [pwSuccess, setPwSuccess] = useState('')
 
   useEffect(() => {
-    fetch('/api/customer/profile')
-      .then(r => r.json())
-      .then(d => {
-        const c = d.customer || d
+    api.get('/customer/profile')
+      .then(r => {
+        const c = r.data.customer || r.data
         setProfile(c)
         setFormData({
           email: c.email || '',
@@ -31,6 +32,9 @@ export default function UserProfile() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+    api.get('/customer/accounts')
+      .then(r => setAccounts(r.data.accounts || []))
+      .catch(() => {})
   }, [])
 
   const data = profile
@@ -50,15 +54,10 @@ export default function UserProfile() {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch('/api/customer/profile/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-      const result = await res.json()
-      if (result.error) { setMessage(`Error: ${result.error}`); setSaving(false); return }
+      const res = await api.post('/customer/profile/update', formData)
+      if (res.data.error) { setMessage(`Error: ${res.data.error}`); setSaving(false); return }
       setMessage('Profile updated successfully!')
-      setProfile(result.customer)
+      setProfile(res.data.customer)
       setEditMode(false)
       setSaving(false)
     } catch (err) {
@@ -80,13 +79,11 @@ export default function UserProfile() {
       return
     }
     try {
-      const res = await fetch('/api/customer/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_password: pwData.current_password, new_password: pwData.new_password })
+      const res = await api.post('/customer/change-password', {
+        current_password: pwData.current_password,
+        new_password: pwData.new_password
       })
-      const result = await res.json()
-      if (result.error) { setPwError(result.error); return }
+      if (res.data.error) { setPwError(res.data.error); return }
       setPwSuccess('Password changed successfully!')
       setPwData({ current_password: '', new_password: '', confirm_password: '' })
       setPwForm(false)
@@ -104,7 +101,7 @@ export default function UserProfile() {
           <div className="page-title">My Profile</div>
           <div className="page-subtitle">Personal and contact information on file.</div>
         </div>
-        <button onClick={handleEditToggle} className="btn">
+        <button onClick={handleEditToggle} className="btn btn-secondary">
           <span className="material-symbols-rounded">{editMode ? 'close' : 'edit'}</span>
           {editMode ? 'Cancel' : 'Edit Profile'}
         </button>
@@ -125,6 +122,15 @@ export default function UserProfile() {
               {data?.customer_id && <span>Customer ID: {data.customer_id} &middot;</span>}
               Member since {data?.created_at ? new Date(data.created_at).toLocaleDateString() : 'N/A'}
             </div>
+            {accounts.length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {accounts.map(a => (
+                  <span key={a.id} style={{ background: 'var(--bg-tertiary)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', color: 'var(--accent-color)', fontFamily: 'monospace' }}>
+                    {a.account_number} &middot; {formatCurrency(a.balance)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

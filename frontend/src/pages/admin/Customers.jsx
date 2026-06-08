@@ -182,8 +182,7 @@ export default function AdminCustomers() {
                         <code style={{ fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--accent-color)' }}>{acc.account_number}</code>
                       ) : (
                         <span className="badge badge-danger">No Active Account</span>
-                      )}
-                    </td>
+                      </td>
                     <td>
                       {acc ? (
                         <span className={`badge ${acc.account_type === 'savings' ? 'badge-success' : acc.account_type === 'fixed_deposit' ? 'badge-warning' : 'badge-info'}`}>

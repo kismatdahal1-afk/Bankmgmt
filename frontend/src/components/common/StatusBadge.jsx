@@ -10,6 +10,8 @@ const badgeClassMap = {
   'paid': 'badge-success',
   'deposit': 'badge-success',
   'withdrawal': 'badge-danger',
+  'transfer_in': 'badge-success',
+  'transfer_out': 'badge-danger',
   'savings': 'badge-success',
   'current': 'badge-info',
   'fixed_deposit': 'badge-warning',

@@ -35,9 +35,11 @@ import StaffTransactionForm from '../pages/staff/TransactionForm'
 import UserDashboard from '../pages/user/Dashboard'
 import FirstLoginFlow from '../components/common/FirstLoginFlow'
 import UserMyAccounts from '../pages/user/MyAccounts'
+import UserApplyAccount from '../pages/user/ApplyAccount'
 import UserMyBalance from '../pages/user/MyBalance'
 import UserMyLoans from '../pages/user/MyLoans'
-import UserEMIStatus from '../pages/user/EMIStatus'
+import UserApplyLoan from '../pages/user/ApplyLoan'
+import FundTransfer from '../pages/user/FundTransfer'
 import UserTransactions from '../pages/user/Transactions'
 import UserNotifications from '../pages/user/Notifications'
 import UserProfile from '../pages/user/Profile'
@@ -88,9 +90,11 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<UserDashboard />} />
         <Route path="my-accounts" element={<UserMyAccounts />} />
+        <Route path="accounts/apply" element={<UserApplyAccount />} />
         <Route path="my-balance" element={<UserMyBalance />} />
         <Route path="my-loans" element={<UserMyLoans />} />
-        <Route path="emi-status" element={<UserEMIStatus />} />
+        <Route path="loans/apply" element={<UserApplyLoan />} />
+        <Route path="transfer" element={<FundTransfer />} />
         <Route path="transactions" element={<UserTransactions />} />
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="profile" element={<UserProfile />} />

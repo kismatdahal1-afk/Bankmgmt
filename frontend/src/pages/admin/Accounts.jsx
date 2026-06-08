@@ -43,6 +43,7 @@ export default function AdminAccounts() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+<<<<<<< HEAD
   }, [buildQuery])
 
   useEffect(() => { fetchAccounts() }, [fetchAccounts])
@@ -62,6 +63,23 @@ export default function AdminAccounts() {
     e.preventDefault()
     setRegisterError('')
     const formData = new FormData(e.target)
+=======
+  }, [location.pathname])
+
+  const pendingCount = accounts.filter(a => a.status === 'pending').length
+
+  const handleAction = async (action, accountId) => {
+    const urlMap = { freeze: 'freeze', unfreeze: 'unfreeze', close: 'close' }
+    let url, msg
+    if (action === 'activate') {
+      url = `/api/accounts/activate/${accountId}`
+      msg = 'Activate this account?'
+    } else {
+      url = `/api/accounts/${urlMap[action]}/${accountId}`
+      msg = action === 'freeze' ? 'Freeze this account?' : action === 'unfreeze' ? 'Unfreeze this account?' : 'Close this account?'
+    }
+    if (!confirm(msg)) return
+>>>>>>> origin/shell
     try {
       const res = await fetch('/api/customers/create', { method: 'POST', body: new URLSearchParams(formData) })
       const data = await res.json()
@@ -166,6 +184,7 @@ export default function AdminAccounts() {
         </div>
       </div>
 
+<<<<<<< HEAD
       <div className="table-container">
         <div className="table-header-bar">
           <span className="table-title">All Bank Accounts</span>
@@ -249,6 +268,26 @@ export default function AdminAccounts() {
             <CustomerFormComponent action="Create" customer={null} onSubmit={handleRegisterSubmit} />
           </div>
         </div>
+=======
+      {loading ? (
+        <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>
+      ) : (
+        <>
+          {pendingCount > 0 && (
+            <div className="badge badge-warning" style={{ marginBottom: '16px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'none', fontWeight: 500, fontSize: '0.9rem', letterSpacing: '0', width: 'fit-content' }}>
+              <span className="material-symbols-rounded">how_to_reg</span>
+              {pendingCount} account{pendingCount > 1 ? 's' : ''} pending activation
+            </div>
+          )}
+          <div className="grid grid-2">
+            {accounts.length > 0 ? accounts.map(acc => (
+              <AccountCard key={acc.id} account={acc} onAction={handleAction} />
+            )) : (
+              <EmptyState icon="account_balance_wallet" message="No accounts found." />
+            )}
+          </div>
+        </>
+>>>>>>> origin/shell
       )}
 
       {credentials && <CredentialCard credentials={credentials} onClose={() => setCredentials(null)} />}

@@ -14,8 +14,8 @@ export default function StaffLogin() {
     setError('')
     try {
       const result = await login(username, password, 'auth')
-      if (result.role === 'staff') navigate('/staff/dashboard')
-      else navigate('/admin/dashboard')
+      if (result.role === 'staff') navigate('/staff/dashboard', { replace: true })
+      else navigate('/admin/dashboard', { replace: true })
     } catch (err) {
       setError(err.message)
     }

@@ -99,7 +99,7 @@ export default function AdminTransactions() {
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>To</label>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '4px 8px', fontSize: '0.85rem' }} />
           </div>
-          <button onClick={handleFilter} className="btn btn-sm" style={{ padding: '4px 12px', fontSize: '0.85rem', height: '32px' }}>
+          <button onClick={handleFilter} className="btn btn-sm btn-secondary" style={{ padding: '4px 12px', fontSize: '0.85rem', height: '32px' }}>
             <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>filter_alt</span> Filter
           </button>
           <button onClick={handleReset} className="btn btn-sm btn-secondary" style={{ padding: '4px 12px', fontSize: '0.85rem', height: '32px' }}>

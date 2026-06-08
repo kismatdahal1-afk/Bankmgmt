@@ -10,7 +10,7 @@ export default function AdminLoanForm() {
     fetch('/api/customers/')
       .then(r => r.json())
       .then(d => setCustomers(d.customers || d))
-      .catch(() => {})
+      .catch(err => console.error('Fetch error:', err))
   }, [])
 
   const handleSubmit = async (e) => {

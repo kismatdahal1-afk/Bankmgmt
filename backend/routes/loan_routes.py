@@ -79,7 +79,7 @@ def approve_loan(loan_id):
         flash("Loan is already processed.", "warning")
         return redirect(url_for('loan.loans_list'))
 
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
     if not active_account:
         flash("Disbursement Failed: The customer does not have an active savings/current account.", "danger")
         return redirect(url_for('loan.loans_list'))
@@ -135,7 +135,7 @@ def repay_loan(loan_id):
         return redirect(url_for('loan.loans_list'))
 
     remaining_balance = loan.total_payable - loan.total_paid
-    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').first()
+    active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
 
     if request.method == 'POST':
         amount_str = request.form.get('amount')

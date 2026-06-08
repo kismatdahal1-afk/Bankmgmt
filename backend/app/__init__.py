@@ -1,7 +1,9 @@
 import os
 from flask import Flask
+from flask_cors import CORS
 from config.settings import Config
 from database.db import db
+from extensions import limiter
 
 def create_app(config_class=Config):
     _backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -10,6 +12,8 @@ def create_app(config_class=Config):
         static_folder=os.path.join(_backend_root, 'static'),
         static_url_path='/static')
     app.config.from_object(config_class)
+    CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'], supports_credentials=True)
+    limiter.init_app(app)
     db.init_app(app)
     os.makedirs(app.instance_path, exist_ok=True)
 
