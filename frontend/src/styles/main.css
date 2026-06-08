@@ -393,7 +393,7 @@ a:hover { color: var(--accent-hover); }
 
 .btn-primary { background-color: var(--accent-color); color: white; }
 .btn-primary:hover { background-color: var(--accent-hover); }
-.btn-secondary { background-color: var(--bg-tertiary); border: 1px solid var(--border-color); }
+.btn-secondary { background-color: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); }
 .btn-secondary:hover { background-color: var(--border-color); }
 .btn-success { background-color: var(--success); color: white; }
 .btn-success:hover { background-color: var(--success-hover); }
