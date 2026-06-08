@@ -27,7 +27,8 @@ def load_customer():
     else:
         g.customer = db.session.get(Customer, customer_id)
         if g.customer is None:
-            session.clear()
+            for k in ['customer_id', 'customer_name']:
+                session.pop(k, None)
 
 @customer_portal_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", methods=['POST'])
@@ -43,7 +44,8 @@ def login():
         customer = Customer.query.filter_by(username=username, status='active').first()
 
         if customer and customer.check_password(password):
-            session.clear()
+            for k in ['customer_id', 'customer_name']:
+                session.pop(k, None)
             session['customer_id'] = customer.id
             session['customer_name'] = customer.full_name
             flash(f'Welcome back, {customer.full_name}!', 'success')
@@ -55,7 +57,8 @@ def login():
 
 @customer_portal_bp.route('/logout')
 def logout():
-    session.clear()
+    for k in ['customer_id', 'customer_name']:
+        session.pop(k, None)
     flash('You have been logged out.', 'success')
     return redirect(url_for('customer_portal.login'))
 
