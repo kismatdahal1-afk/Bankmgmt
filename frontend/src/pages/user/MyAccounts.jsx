@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import api from '../../services/api'
 import AccountCard from '../../components/cards/AccountCard'
 import EmptyState from '../../components/common/EmptyState'
 
@@ -7,9 +8,8 @@ export default function UserMyAccounts() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/accounts')
-      .then(r => r.json())
-      .then(d => { setAccounts(d.accounts || d); setLoading(false) })
+    api.get('/customer/accounts')
+      .then(r => { setAccounts(r.data.accounts || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 

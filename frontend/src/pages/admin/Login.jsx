@@ -14,8 +14,8 @@ export default function AdminLogin() {
     setError('')
     try {
       const result = await login(username, password, 'auth')
-      if (result.role === 'admin') navigate('/admin/dashboard')
-      else navigate('/staff/dashboard')
+      if (result.role === 'admin') navigate('/admin/dashboard', { replace: true })
+      else navigate('/staff/dashboard', { replace: true })
     } catch (err) {
       setError(err.message)
     }

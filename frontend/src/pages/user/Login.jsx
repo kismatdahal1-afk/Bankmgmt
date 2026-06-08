@@ -15,9 +15,9 @@ export default function UserLogin() {
     try {
       const result = await login(username, password, 'customer')
       if (result?.must_change_password) {
-        navigate('/user/first-login')
+        navigate('/user/first-login', { replace: true })
       } else {
-        navigate('/user/dashboard')
+        navigate('/user/dashboard', { replace: true })
       }
     } catch (err) {
       setError(err.message)

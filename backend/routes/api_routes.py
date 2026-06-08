@@ -178,27 +178,30 @@ def _serialize_loan(l):
 # ===== AUTH ENDPOINTS =====
 
 @api_bp.route('/auth/login', methods=['POST'])
-@limiter.limit("10 per minute")
 def api_login():
-    data = request.get_json(silent=True) or request.form
-    username = (data.get('username') or '').strip()
-    password = data.get('password', '')
-    user = User.query.filter_by(username=username).first()
-    if not user or not user.check_password(password):
-        log_audit('login_failed', 'auth', None, f'Failed login attempt for user: {username}', 'failure')
+    try:
+        data = request.get_json(silent=True) or request.form
+        username = (data.get('username') or '').strip()
+        password = data.get('password', '')
+        user = User.query.filter_by(username=username).first()
+        if not user or not user.check_password(password):
+            log_audit('login_failed', 'auth', None, f'Failed login attempt for user: {username}', 'failure')
+            db.session.commit()
+            return jsonify({'error': 'Invalid username or password'}), 401
+        session.clear()
+        session['user_id'] = user.id
+        session['username'] = user.username
+        session['role'] = user.role
+        log_audit('login', 'auth', user.id, f'User {user.username} ({user.role}) logged in')
         db.session.commit()
-        return jsonify({'error': 'Invalid username or password'}), 401
-    session.clear()
-    session['user_id'] = user.id
-    session['username'] = user.username
-    session['role'] = user.role
-    log_audit('login', 'auth', user.id, f'User {user.username} ({user.role}) logged in')
-    db.session.commit()
-    return jsonify({
-        'user_id': user.id,
-        'username': user.username,
-        'role': user.role
-    })
+        return jsonify({
+            'user_id': user.id,
+            'username': user.username,
+            'role': user.role
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @api_bp.route('/auth/logout', methods=['POST'])
 def api_logout():
@@ -209,30 +212,33 @@ def api_logout():
     return jsonify({'message': 'Logged out successfully'})
 
 @api_bp.route('/customer/login', methods=['POST'])
-@limiter.limit("10 per minute")
 def api_customer_login():
-    data = request.get_json(silent=True) or request.form
-    username = (data.get('username') or '').strip()
-    password = data.get('password', '')
-    customer = Customer.query.filter_by(username=username, status='active').first()
-    if not customer or not customer.check_password(password):
-        log_audit('customer_login_failed', 'auth', None, f'Failed customer login: {username}', 'failure')
+    try:
+        data = request.get_json(silent=True) or request.form
+        username = (data.get('username') or '').strip()
+        password = data.get('password', '')
+        customer = Customer.query.filter_by(username=username, status='active').first()
+        if not customer or not customer.check_password(password):
+            log_audit('customer_login_failed', 'auth', None, f'Failed customer login: {username}', 'failure')
+            db.session.commit()
+            return jsonify({'error': 'Invalid username or password'}), 401
+        session.clear()
+        session['customer_id'] = customer.id
+        session['customer_name'] = customer.full_name
+        log_audit('customer_login', 'auth', customer.id, f'Customer {customer.full_name} logged in')
         db.session.commit()
-        return jsonify({'error': 'Invalid username or password'}), 401
-    session.clear()
-    session['customer_id'] = customer.id
-    session['customer_name'] = customer.full_name
-    log_audit('customer_login', 'auth', customer.id, f'Customer {customer.full_name} logged in')
-    db.session.commit()
-    return jsonify({
-        'customer_id': customer.id,
-        'customer_name': customer.full_name,
-        'phone_number': customer.phone_number,
-        'email': customer.email or '',
-        'must_change_password': customer.must_change_password,
-        'mobile_confirmed': customer.mobile_confirmed,
-        'email_confirmed': customer.email_confirmed
-    })
+        return jsonify({
+            'customer_id': customer.id,
+            'customer_name': customer.full_name,
+            'phone_number': customer.phone_number,
+            'email': customer.email or '',
+            'must_change_password': customer.must_change_password,
+            'mobile_confirmed': customer.mobile_confirmed,
+            'email_confirmed': customer.email_confirmed
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @api_bp.route('/customer/logout', methods=['POST'])
 def api_customer_logout():
@@ -1102,6 +1108,24 @@ def api_customer_dashboard():
     total_loan_amount = sum((l.amount or Decimal('0')) for l in active_loans)
     total_loan_paid = sum((l.total_paid or Decimal('0')) for l in active_loans)
     total_loan_remaining = total_loan_amount - total_loan_paid
+    today = _utcnow().date()
+    dates = [today - datetime.timedelta(days=i) for i in range(6, -1, -1)]
+    date_labels = [d.strftime('%b %d') for d in dates]
+    daily_deposits = []
+    daily_withdrawals = []
+    for d in dates:
+        start = datetime.datetime.combine(d, datetime.time.min)
+        end = datetime.datetime.combine(d, datetime.time.max)
+        dep = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0)).filter(
+            Transaction.account_id.in_(account_ids),
+            Transaction.type == 'deposit', Transaction.created_at >= start, Transaction.created_at <= end
+        ).scalar() or Decimal('0.00')
+        wit = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0)).filter(
+            Transaction.account_id.in_(account_ids),
+            Transaction.type == 'withdrawal', Transaction.created_at >= start, Transaction.created_at <= end
+        ).scalar() or Decimal('0.00')
+        daily_deposits.append(float(dep))
+        daily_withdrawals.append(float(wit))
     return jsonify({
         'customer': _serialize_customer(customer),
         'total_balance': float(total_balance),
@@ -1112,7 +1136,10 @@ def api_customer_dashboard():
         'total_loan_amount': float(total_loan_amount),
         'total_loan_paid': float(total_loan_paid),
         'total_loan_remaining': float(max(0, total_loan_remaining)),
-        'recent_transactions': [_serialize_transaction(t) for t in recent]
+        'recent_transactions': [_serialize_transaction(t) for t in recent],
+        'date_labels': date_labels,
+        'daily_deposits': daily_deposits,
+        'daily_withdrawals': daily_withdrawals
     })
 
 @api_bp.route('/customer/accounts', methods=['GET'])

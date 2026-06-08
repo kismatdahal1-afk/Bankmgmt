@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import api from '../../services/api'
 import { getInitials, formatDate } from '../../utils/helpers'
 
 export default function UserProfile() {
@@ -16,10 +17,9 @@ export default function UserProfile() {
   const [pwSuccess, setPwSuccess] = useState('')
 
   useEffect(() => {
-    fetch('/api/customer/profile')
-      .then(r => r.json())
-      .then(d => {
-        const c = d.customer || d
+    api.get('/customer/profile')
+      .then(r => {
+        const c = r.data.customer || r.data
         setProfile(c)
         setFormData({
           email: c.email || '',
@@ -50,15 +50,10 @@ export default function UserProfile() {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch('/api/customer/profile/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-      const result = await res.json()
-      if (result.error) { setMessage(`Error: ${result.error}`); setSaving(false); return }
+      const res = await api.post('/customer/profile/update', formData)
+      if (res.data.error) { setMessage(`Error: ${res.data.error}`); setSaving(false); return }
       setMessage('Profile updated successfully!')
-      setProfile(result.customer)
+      setProfile(res.data.customer)
       setEditMode(false)
       setSaving(false)
     } catch (err) {
@@ -80,13 +75,11 @@ export default function UserProfile() {
       return
     }
     try {
-      const res = await fetch('/api/customer/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_password: pwData.current_password, new_password: pwData.new_password })
+      const res = await api.post('/customer/change-password', {
+        current_password: pwData.current_password,
+        new_password: pwData.new_password
       })
-      const result = await res.json()
-      if (result.error) { setPwError(result.error); return }
+      if (res.data.error) { setPwError(res.data.error); return }
       setPwSuccess('Password changed successfully!')
       setPwData({ current_password: '', new_password: '', confirm_password: '' })
       setPwForm(false)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import api from '../../services/api'
 import NotificationItem from '../../components/notifications/NotificationItem'
 import EmptyState from '../../components/common/EmptyState'
 
@@ -7,15 +8,14 @@ export default function UserNotifications() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/notifications')
-      .then(r => r.json())
-      .then(d => { setNotifications(d.notifications || d); setLoading(false) })
+    api.get('/customer/notifications')
+      .then(r => { setNotifications(r.data.notifications || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
   const handleMarkRead = async (id) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'POST' })
+      await api.post(`/notifications/${id}/read`)
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
     } catch (e) {
       console.error(e)

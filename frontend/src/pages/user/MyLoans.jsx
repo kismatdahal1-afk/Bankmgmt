@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import api from '../../services/api'
 import LoanCard from '../../components/cards/LoanCard'
 import EmptyState from '../../components/common/EmptyState'
 
@@ -7,9 +8,8 @@ export default function UserMyLoans() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/loans')
-      .then(r => r.json())
-      .then(d => { setLoans(d.loans || d); setLoading(false) })
+    api.get('/customer/loans')
+      .then(r => { setLoans(r.data.loans || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 

@@ -24,8 +24,14 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password, portal) => {
     try {
-      const res = await api.post(`/${portal}/login`, { username, password })
-      const data = res.data
+      const res = await fetch(`/api/${portal}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Login failed')
       if (portal === 'customer') {
         sessionStorage.setItem('customer_id', data.customer_id)
         sessionStorage.setItem('customer_name', data.customer_name)
@@ -41,7 +47,7 @@ export function AuthProvider({ children }) {
       setUser({ id: data.user_id, username: data.username, role: data.role })
       return { role: data.role }
     } catch (err) {
-      throw new Error(err.response?.data?.error || 'Login failed')
+      throw new Error(err.message || 'Login failed')
     }
   }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import api from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
 
@@ -7,9 +8,8 @@ export default function UserTransactions() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/transactions')
-      .then(r => r.json())
-      .then(d => { setTransactions(d.transactions || d); setLoading(false) })
+    api.get('/customer/transactions')
+      .then(r => { setTransactions(r.data.transactions || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
