@@ -42,16 +42,13 @@ export default function AdminCustomerForm() {
         } else {
           navigate('/admin/accounts')
         }
-        } else {
-          navigate('/admin/accounts')
-        }
-      }
-    } catch (err) {
+      } catch (err) {
       if (err.response?.data?.error) {
         alert(err.response.data.error)
       }
       console.error(err)
     }
+  }
   }
 
   return (
