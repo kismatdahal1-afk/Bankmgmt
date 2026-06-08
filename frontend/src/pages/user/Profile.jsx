@@ -97,7 +97,7 @@ export default function UserProfile() {
           <div className="page-title">My Profile</div>
           <div className="page-subtitle">Personal and contact information on file.</div>
         </div>
-        <button onClick={handleEditToggle} className="btn">
+        <button onClick={handleEditToggle} className="btn btn-secondary">
           <span className="material-symbols-rounded">{editMode ? 'close' : 'edit'}</span>
           {editMode ? 'Cancel' : 'Edit Profile'}
         </button>

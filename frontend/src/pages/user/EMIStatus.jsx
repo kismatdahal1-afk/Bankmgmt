@@ -43,8 +43,7 @@ export default function UserEMIStatus() {
     setPayError('')
     setPaySuccess('')
     try {
-      const res = await api.post(`/customer/loans/repay/${payingLoan.id}`, { amount: payAmount })
-      setPaySuccess(res.data.message || 'Repayment successful!')
+      await api.post(`/customer/loans/repay/${payingLoan.id}`, { amount: payAmount })
       closePayModal()
       loadLoans()
     } catch (err) {
