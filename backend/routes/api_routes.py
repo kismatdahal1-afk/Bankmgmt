@@ -1151,6 +1151,60 @@ def api_customer_accounts():
     accounts = Account.query.filter_by(customer_id=customer.id).order_by(Account.created_at.desc()).all()
     return jsonify({'accounts': [_serialize_account(a) for a in accounts]})
 
+@api_bp.route('/customer/accounts/apply', methods=['POST'])
+@customer_login_required_api
+def api_customer_account_apply():
+    try:
+        customer = db.session.get(Customer, session['customer_id'])
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        data = request.get_json(silent=True) or request.form
+        account_type = (data.get('account_type') or '').strip().lower()
+        valid_types = ['savings', 'current', 'fixed_deposit']
+        if account_type not in valid_types:
+            return jsonify({'error': f'Invalid type. Choose: {", ".join(valid_types)}'}), 400
+        acc_num = generate_account_number()
+        account = Account(
+            customer_id=customer.id,
+            account_number=acc_num,
+            account_type=account_type,
+            status='pending'
+        )
+        db.session.add(account)
+        log_audit('account_applied', 'account', account.id,
+            f'{account_type} account {acc_num} requested by {customer.full_name}')
+        notify_customer(customer.id, 'Account Request Submitted',
+            f'Your request for a new {account_type} account ({acc_num}) has been submitted for approval.')
+        staff_users = User.query.filter(User.role.in_(['admin', 'staff'])).all()
+        for u in staff_users:
+            notify_staff(u.id, 'New Account Request',
+                f'{customer.full_name} has requested a new {account_type} account. Review in Accounts.')
+        db.session.commit()
+        return jsonify({'message': 'Account request submitted for approval', 'account': _serialize_account(account)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/accounts/activate/<int:account_id>', methods=['POST'])
+@staff_or_admin_required
+def api_activate_account(account_id):
+    try:
+        account = db.session.get(Account, account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        if account.status != 'pending':
+            return jsonify({'error': 'Account is not pending'}), 400
+        account.status = 'active'
+        log_audit('account_activated', 'account', account.id,
+            f'Account {account.account_number} activated by {session.get("user_id")}')
+        notify_customer(account.customer_id, 'Account Activated',
+            f'Your {account.account_type} account ({account.account_number}) has been approved and is now active.')
+        db.session.commit()
+        return jsonify({'message': 'Account activated', 'account': _serialize_account(account)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/customer/loans', methods=['GET'])
 @customer_login_required_api
 def api_customer_loans():
@@ -1260,6 +1314,83 @@ def api_customer_repay_loan(loan_id):
             f'EMI #{emi_cnt} of NPR {float(amount):,.2f} received for loan {loan.loan_number}.')
         db.session.commit()
         return jsonify({'message': 'Repayment successful', 'loan': _serialize_loan(loan)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/customer/transfer', methods=['POST'])
+@customer_login_required_api
+def api_customer_transfer():
+    try:
+        customer = db.session.get(Customer, session['customer_id'])
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        data = request.get_json(silent=True) or request.form
+        from_account_id = data.get('from_account_id')
+        to_account_number = data.get('to_account_number')
+        amount_str = data.get('amount')
+        description = (data.get('description') or '').strip()
+        if not all([from_account_id, to_account_number, amount_str]):
+            return jsonify({'error': 'Source account, target account, and amount are required'}), 400
+        try:
+            amount = Decimal(str(amount_str))
+            if amount <= 0:
+                return jsonify({'error': 'Amount must be positive'}), 400
+        except Exception:
+            return jsonify({'error': 'Invalid amount'}), 400
+        from_account = Account.query.filter_by(id=int(from_account_id), customer_id=customer.id, status='active').with_for_update().first()
+        if not from_account:
+            return jsonify({'error': 'Source account not found or not active'}), 404
+        if from_account.balance < amount:
+            return jsonify({'error': 'Insufficient balance'}), 400
+        to_account = Account.query.filter_by(account_number=to_account_number, status='active').with_for_update().first()
+        if not to_account:
+            return jsonify({'error': 'Target account not found'}), 404
+        if from_account.id == to_account.id:
+            return jsonify({'error': 'Cannot transfer to the same account'}), 400
+        ref = f"TRF-{uuid.uuid4().hex[:8].upper()}"
+        from_balance = from_account.balance - amount
+        from_account.balance = from_balance
+        from_account.last_transaction_date = _utcnow()
+        from_account.total_withdrawals += amount
+        tx_out = Transaction(
+            transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
+            account_id=from_account.id,
+            type='transfer_out',
+            amount=amount,
+            balance_after=from_balance,
+            description=description or f"Transfer to {to_account_number}",
+            status='successful',
+            reference_number=ref,
+            created_by=session['customer_id']
+        )
+        db.session.add(tx_out)
+        to_balance = to_account.balance + amount
+        to_account.balance = to_balance
+        to_account.last_transaction_date = _utcnow()
+        to_account.total_deposits += amount
+        tx_in = Transaction(
+            transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
+            account_id=to_account.id,
+            type='transfer_in',
+            amount=amount,
+            balance_after=to_balance,
+            description=description or f"Transfer from {from_account.account_number}",
+            status='successful',
+            reference_number=ref,
+            created_by=session['customer_id']
+        )
+        db.session.add(tx_in)
+        log_audit('transfer', 'transaction', tx_out.id,
+            f'Transfer of {amount} from account {from_account.account_number} to {to_account_number}. Ref: {ref}')
+        notify_customer(customer.id, 'Transfer Sent',
+            f'NPR {float(amount):,.2f} sent to account {to_account_number}. Ref: {ref}')
+        to_customer = db.session.get(Customer, to_account.customer_id)
+        if to_customer:
+            notify_customer(to_customer.id, 'Transfer Received',
+                f'NPR {float(amount):,.2f} received from {customer.full_name} ({from_account.account_number}). Ref: {ref}')
+        db.session.commit()
+        return jsonify({'message': 'Transfer successful', 'reference': ref})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

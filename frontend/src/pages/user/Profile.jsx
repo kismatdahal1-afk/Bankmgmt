@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
-import { getInitials, formatDate } from '../../utils/helpers'
+import { getInitials, formatDate, formatCurrency } from '../../utils/helpers'
 
 export default function UserProfile() {
   const { customer } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [accounts, setAccounts] = useState([])
   const [editMode, setEditMode] = useState(false)
   const [formData, setFormData] = useState({})
   const [saving, setSaving] = useState(false)
@@ -31,6 +32,9 @@ export default function UserProfile() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+    api.get('/customer/accounts')
+      .then(r => setAccounts(r.data.accounts || []))
+      .catch(() => {})
   }, [])
 
   const data = profile
@@ -118,6 +122,15 @@ export default function UserProfile() {
               {data?.customer_id && <span>Customer ID: {data.customer_id} &middot;</span>}
               Member since {data?.created_at ? new Date(data.created_at).toLocaleDateString() : 'N/A'}
             </div>
+            {accounts.length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {accounts.map(a => (
+                  <span key={a.id} style={{ background: 'var(--bg-tertiary)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', color: 'var(--accent-color)', fontFamily: 'monospace' }}>
+                    {a.account_number} &middot; {formatCurrency(a.balance)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

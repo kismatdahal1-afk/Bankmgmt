@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import api from '../../services/api'
 import NotificationBell from '../../components/notifications/NotificationBell'
 
 export default function UserLayout() {
   const { customer, customerLogout } = useAuth()
   const navigate = useNavigate()
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString())
+  const [accountNumbers, setAccountNumbers] = useState([])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date().toLocaleString()), 1000)
+    api.get('/customer/accounts')
+      .then(r => setAccountNumbers((r.data.accounts || []).map(a => a.account_number)))
+      .catch(() => {})
     return () => clearInterval(timer)
   }, [])
 
@@ -29,6 +34,7 @@ export default function UserLayout() {
           <li><NavLink to="/user/dashboard"><span className="material-symbols-rounded">dashboard</span>Dashboard</NavLink></li>
           <li><NavLink to="/user/my-accounts"><span className="material-symbols-rounded">account_balance_wallet</span>Accounts</NavLink></li>
           <li><NavLink to="/user/my-balance"><span className="material-symbols-rounded">account_balance</span>Balance</NavLink></li>
+          <li><NavLink to="/user/transfer"><span className="material-symbols-rounded">send_money</span>Transfer</NavLink></li>
           <li><NavLink to="/user/transactions"><span className="material-symbols-rounded">receipt_long</span>Transactions</NavLink></li>
           <li><NavLink to="/user/my-loans"><span className="material-symbols-rounded">request_quote</span>Loans</NavLink></li>
           <li><NavLink to="/user/emi-status"><span className="material-symbols-rounded">calendar_month</span>EMI Status</NavLink></li>
@@ -41,7 +47,7 @@ export default function UserLayout() {
               <div className="user-avatar">{customer?.name?.[0]?.toUpperCase() || 'C'}</div>
               <div className="user-details">
                 <span className="user-name">{customer?.name || 'Customer'}</span>
-                <span className="user-role">customer</span>
+                <span className="user-role" style={{ fontSize: '11px' }}>{accountNumbers.length > 0 ? accountNumbers.join(', ') : 'customer'}</span>
               </div>
             </div>
             <button onClick={handleLogout} style={{ color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }} title="Logout">

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../../services/api'
 import AccountCard from '../../components/cards/AccountCard'
 import EmptyState from '../../components/common/EmptyState'
 
 export default function UserMyAccounts() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -11,7 +14,7 @@ export default function UserMyAccounts() {
     api.get('/customer/accounts')
       .then(r => { setAccounts(r.data.accounts || []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }, [location.pathname])
 
   return (
     <>
@@ -20,6 +23,10 @@ export default function UserMyAccounts() {
           <div className="page-title">My Accounts</div>
           <div className="page-subtitle">All accounts held under your customer profile.</div>
         </div>
+        <button className="btn btn-primary" onClick={() => navigate('/user/accounts/apply')}>
+          <span className="material-symbols-rounded">add</span>
+          New Account
+        </button>
       </div>
 
       {loading ? (
