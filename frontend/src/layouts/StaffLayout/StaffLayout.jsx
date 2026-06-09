@@ -26,6 +26,7 @@ export default function StaffLayout() {
           <li><NavLink to="/staff/loans"><span className="material-symbols-rounded">handshake</span>Loans</NavLink></li>
           <li><NavLink to="/staff/emi"><span className="material-symbols-rounded">calendar_month</span>EMI</NavLink></li>
           <li><NavLink to="/staff/reports"><span className="material-symbols-rounded">analytics</span>Reports</NavLink></li>
+          <li><NavLink to="/staff/notifications"><span className="material-symbols-rounded">notifications</span>Notifications</NavLink></li>
         </ul>
         <div className="sidebar-footer">
           <div className="user-info" style={{ justifyContent: 'space-between', width: '100%' }}>

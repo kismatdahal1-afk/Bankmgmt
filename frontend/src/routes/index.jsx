@@ -20,7 +20,9 @@ import AdminReports from '../pages/admin/Reports'
 import AdminStaffManagement from '../pages/admin/StaffManagement'
 import AdminSettings from '../pages/admin/Settings'
 import AdminAuditLogs from '../pages/admin/AdminAuditLogs'
+import AdminNotifications from '../pages/admin/Notifications'
 import AdminAccountDetail from '../pages/admin/AccountDetail'
+import StaffNotifications from '../pages/staff/Notifications'
 import StaffAccountDetail from '../pages/staff/AccountDetail'
 import StaffReports from '../pages/staff/Reports'
 import StaffDashboard from '../pages/staff/Dashboard'
@@ -33,7 +35,7 @@ import StaffEMI from '../pages/staff/EMI'
 import StaffTransactions from '../pages/staff/Transactions'
 import StaffTransactionForm from '../pages/staff/TransactionForm'
 import UserDashboard from '../pages/user/Dashboard'
-import FirstLoginFlow from '../components/common/FirstLoginFlow'
+/* import FirstLoginFlow from '../components/common/FirstLoginFlow' */
 import UserMyAccounts from '../pages/user/MyAccounts'
 import UserApplyAccount from '../pages/user/ApplyAccount'
 import UserMyBalance from '../pages/user/MyBalance'
@@ -69,6 +71,7 @@ export default function AppRoutes() {
         <Route path="staff" element={<AdminStaffManagement />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
+        <Route path="notifications" element={<AdminNotifications />} />
       </Route>
       <Route path="/staff" element={<PrivateRoute role="staff"><StaffLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
@@ -84,8 +87,8 @@ export default function AppRoutes() {
         <Route path="transactions/deposit" element={<StaffTransactionForm />} />
         <Route path="transactions/withdraw" element={<StaffTransactionForm />} />
         <Route path="reports" element={<StaffReports />} />
+        <Route path="notifications" element={<StaffNotifications />} />
       </Route>
-      <Route path="/user/first-login" element={<FirstLoginFlow />} />
       <Route path="/user" element={<PrivateRoute role="customer"><UserLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<UserDashboard />} />

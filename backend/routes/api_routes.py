@@ -19,12 +19,29 @@ from utils.report_helper import (
 def _utcnow():
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
+def _next_reference(prefix='TRF'):
+    """Generate a globally sequential reference number."""
+    from models import ReferenceSequence
+    num = ReferenceSequence.next_value()
+    db.session.flush()
+    return f"{prefix}-{num:09d}"
+
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 def api_login_required(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
-        if 'user_id' not in session and 'customer_id' not in session:
+        from models import CustomerToken
+        auth_token = request.headers.get('X-Auth-Token')
+        if auth_token:
+            token_record = CustomerToken.query.filter_by(token=auth_token).first()
+            if not token_record:
+                return jsonify({'error': 'Invalid or expired session'}), 401
+            g.current_customer = db.session.get(Customer, token_record.customer_id)
+            if not g.current_customer:
+                return jsonify({'error': 'Customer not found'}), 404
+            return f(*args, **kwargs)
+        if 'customer_id' not in session and 'user_id' not in session:
             return jsonify({'error': 'Authentication required'}), 401
         return f(*args, **kwargs)
     return decorated
@@ -53,8 +70,21 @@ def admin_required(f):
 def customer_login_required_api(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        from models import CustomerToken
+        auth_token = request.headers.get('X-Auth-Token')
+        if auth_token:
+            token_record = CustomerToken.query.filter_by(token=auth_token).first()
+            if not token_record:
+                return jsonify({'error': 'Invalid or expired session'}), 401
+            g.current_customer = db.session.get(Customer, token_record.customer_id)
+            if not g.current_customer:
+                return jsonify({'error': 'Customer not found'}), 404
+            return f(*args, **kwargs)
         if 'customer_id' not in session:
             return jsonify({'error': 'Customer authentication required'}), 401
+        g.current_customer = db.session.get(Customer, session['customer_id'])
+        if not g.current_customer:
+            return jsonify({'error': 'Customer not found'}), 404
         return f(*args, **kwargs)
     return decorated
 
@@ -140,6 +170,8 @@ def _simple_account(a):
     }
 
 def _serialize_transaction(t):
+    acc = t.account
+    cust = acc.customer if acc else None
     return {
         'id': t.id,
         'transaction_uuid': t.transaction_uuid,
@@ -151,7 +183,9 @@ def _serialize_transaction(t):
         'status': t.status,
         'reference_number': t.reference_number,
         'created_at': t.created_at.isoformat() if t.created_at else None,
-        'account': _serialize_account(t.account) if t.account else None
+        'account_number': acc.account_number if acc else None,
+        'customer_name': cust.full_name if cust else None,
+        'account': _serialize_account(acc) if acc else None
     }
 
 def _compute_loan_overdue(l):
@@ -257,6 +291,11 @@ def api_customer_login():
             session.pop(k, None)
         session['customer_id'] = customer.id
         session['customer_name'] = customer.full_name
+        import secrets
+        token_str = secrets.token_hex(32)
+        from models import CustomerToken
+        token = CustomerToken(token=token_str, customer_id=customer.id)
+        db.session.add(token)
         log_audit('customer_login', 'auth', customer.id, f'Customer {customer.full_name} logged in')
         db.session.commit()
         return jsonify({
@@ -264,7 +303,7 @@ def api_customer_login():
             'customer_name': customer.full_name,
             'phone_number': customer.phone_number,
             'email': customer.email or '',
-            'must_change_password': customer.must_change_password,
+            'auth_token': token_str,
             'mobile_confirmed': customer.mobile_confirmed,
             'email_confirmed': customer.email_confirmed
         })
@@ -274,6 +313,10 @@ def api_customer_login():
 
 @api_bp.route('/customer/logout', methods=['POST'])
 def api_customer_logout():
+    from models import CustomerToken
+    auth_token = request.headers.get('X-Auth-Token')
+    if auth_token:
+        CustomerToken.query.filter_by(token=auth_token).delete()
     if 'customer_id' in session:
         log_audit('customer_logout', 'auth', session.get('customer_id'), f'Customer {session.get("customer_name")} logged out')
         db.session.commit()
@@ -399,7 +442,7 @@ def api_create_customer():
             nominee_contact=(data.get('nominee_contact') or '').strip() or None,
             nominee_relationship=(data.get('nominee_relationship') or '').strip() or None,
             username=username,
-            must_change_password=True
+            must_change_password=False
         )
         customer.set_password(temp_password)
         db.session.add(customer)
@@ -569,15 +612,21 @@ def api_reset_customer_password(customer_id):
         if not (has_letter and has_digit and has_special):
             return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
         customer.set_password(new_password)
-        customer.must_change_password = True
+        db.session.flush()
+        log_audit('customer_password_reset', 'customer', customer_id,
+            f'Password reset by {g.current_user.role} ({g.current_user.username}) for {customer.full_name}')
+        notify_customer(customer.id, 'Password Reset by Bank',
+            'Your password was reset by bank staff. You can now log in using your new password.')
         db.session.commit()
-        log_audit('customer_password_reset', 'customer', customer_id, f'Password manually reset for {customer.full_name}')
         return jsonify({'message': 'Password updated successfully'})
     temp_password = generate_password_from_name_phone(customer.full_name, customer.phone_number)
     customer.set_password(temp_password)
-    customer.must_change_password = True
+    db.session.flush()
+    log_audit('customer_password_reset', 'customer', customer_id,
+        f'Password auto-generated by {g.current_user.role} ({g.current_user.username}) for {customer.full_name}')
+    notify_customer(customer.id, 'Password Reset by Bank',
+        'Your password was reset by bank staff. You can now log in using your new password.')
     db.session.commit()
-    log_audit('customer_password_reset', 'customer', customer_id, f'Password reset for {customer.full_name}')
     return jsonify({'message': 'Password reset successfully', 'temporary_password': temp_password})
 
 # ===== ACCOUNT ENDPOINTS =====
@@ -712,6 +761,8 @@ def api_freeze_account(account_id):
         return jsonify({'error': 'Cannot freeze a closed account'}), 400
     account.status = 'frozen'
     log_audit('account_frozen', 'account', account_id, f'Account {account.account_number} frozen')
+    notify_customer(account.customer_id, 'Account Frozen',
+        f'Your account ({account.account_number}) has been frozen.')
     db.session.commit()
     return jsonify({'message': 'Account frozen', 'account': _serialize_account(account)})
 
@@ -723,6 +774,8 @@ def api_unfreeze_account(account_id):
         return jsonify({'error': 'Account is not frozen'}), 400
     account.status = 'active'
     log_audit('account_unfrozen', 'account', account_id, f'Account {account.account_number} unfrozen')
+    notify_customer(account.customer_id, 'Account Unfrozen',
+        f'Your account ({account.account_number}) has been unfrozen.')
     db.session.commit()
     return jsonify({'message': 'Account unfrozen', 'account': _serialize_account(account)})
 
@@ -734,6 +787,8 @@ def api_close_account(account_id):
         return jsonify({'error': 'Account has remaining balance. Withdraw funds first.'}), 400
     account.status = 'closed'
     log_audit('account_closed', 'account', account_id, f'Account {account.account_number} closed')
+    notify_customer(account.customer_id, 'Account Closed',
+        f'Your account ({account.account_number}) has been closed.')
     db.session.commit()
     return jsonify({'message': 'Account closed', 'account': _serialize_account(account)})
 
@@ -744,8 +799,10 @@ def api_suspend_account(account_id):
     if account.status == 'closed':
         return jsonify({'error': 'Cannot suspend a closed account'}), 400
     account.status = 'suspended'
-    db.session.commit()
     log_audit('account_suspended', 'account', account_id, f'Account {account.account_number} suspended')
+    notify_customer(account.customer_id, 'Account Suspended',
+        f'Your account ({account.account_number}) has been suspended.')
+    db.session.commit()
     return jsonify({'message': 'Account suspended', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/unsuspend/<int:account_id>', methods=['POST'])
@@ -755,8 +812,10 @@ def api_unsuspend_account(account_id):
     if account.status != 'suspended':
         return jsonify({'error': 'Account is not suspended'}), 400
     account.status = 'active'
-    db.session.commit()
     log_audit('account_unsuspended', 'account', account_id, f'Account {account.account_number} unsuspended')
+    notify_customer(account.customer_id, 'Account Unsuspended',
+        f'Your account ({account.account_number}) has been unsuspended.')
+    db.session.commit()
     return jsonify({'message': 'Account unsuspended', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/archive/<int:account_id>', methods=['POST'])
@@ -764,8 +823,10 @@ def api_unsuspend_account(account_id):
 def api_archive_account(account_id):
     account = Account.query.get_or_404(account_id)
     account.status = 'archived'
-    db.session.commit()
     log_audit('account_archived', 'account', account_id, f'Account {account.account_number} archived')
+    notify_customer(account.customer_id, 'Account Archived',
+        f'Your account ({account.account_number}) has been archived.')
+    db.session.commit()
     return jsonify({'message': 'Account archived', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/unarchive/<int:account_id>', methods=['POST'])
@@ -775,20 +836,11 @@ def api_unarchive_account(account_id):
     if account.status != 'archived':
         return jsonify({'error': 'Account is not archived'}), 400
     account.status = 'active'
-    db.session.commit()
     log_audit('account_unarchived', 'account', account_id, f'Account {account.account_number} unarchived')
-    return jsonify({'message': 'Account unarchived', 'account': _serialize_account(account)})
-
-@api_bp.route('/accounts/reopen/<int:account_id>', methods=['POST'])
-@admin_required
-def api_reopen_account(account_id):
-    account = Account.query.get_or_404(account_id)
-    if account.status != 'closed':
-        return jsonify({'error': 'Account is not closed'}), 400
-    account.status = 'active'
+    notify_customer(account.customer_id, 'Account Unarchived',
+        f'Your account ({account.account_number}) has been unarchived.')
     db.session.commit()
-    log_audit('account_reopened', 'account', account_id, f'Account {account.account_number} reopened')
-    return jsonify({'message': 'Account reopened', 'account': _serialize_account(account)})
+    return jsonify({'message': 'Account unarchived', 'account': _serialize_account(account)})
 
 @api_bp.route('/customers/forgot-password/verify', methods=['POST'])
 @staff_or_admin_required
@@ -842,9 +894,12 @@ def api_forgot_password_set():
     if not (has_letter and has_digit and has_special):
         return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
     customer.set_password(new_password)
-    customer.must_change_password = True
+    db.session.flush()
+    log_audit('customer_password_forgot', 'customer', customer.id,
+        f'Password set via forgot-password flow by {g.current_user.role} ({g.current_user.username}) for {customer.full_name}')
+    notify_customer(customer.id, 'Password Recovered',
+        'Your password has been recovered and updated by bank staff.')
     db.session.commit()
-    log_audit('customer_password_forgot', 'customer', customer.id, f'Password set via forgot-password flow for {customer.full_name}')
     return jsonify({'message': 'Password has been updated successfully.'})
 
 @api_bp.route('/customers/<int:customer_id>/forgot-password', methods=['POST'])
@@ -877,16 +932,27 @@ def api_customer_forgot_password():
     if new_password:
         if len(new_password) < 6:
             return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        has_letter = any(c.isalpha() for c in new_password)
+        has_digit = any(c.isdigit() for c in new_password)
+        has_special = any(not c.isalnum() for c in new_password)
+        if not (has_letter and has_digit and has_special):
+            return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
         customer.set_password(new_password)
-        customer.must_change_password = True
+        db.session.flush()
+        log_audit('customer_password_forgot', 'customer', customer.id,
+            f'Password set via forgot password for {customer.full_name}')
+        notify_customer(customer.id, 'Password Recovered',
+            'Your password has been recovered and updated.')
         db.session.commit()
-        log_audit('customer_password_forgot', 'customer', customer.id, f'Password set via forgot password for {customer.full_name}')
         return jsonify({'message': 'Identity verified. Password has been updated.'})
     temp_password = generate_password_from_name_phone(customer.full_name, customer.phone_number)
     customer.set_password(temp_password)
-    customer.must_change_password = True
+    db.session.flush()
+    log_audit('customer_password_forgot', 'customer', customer.id,
+        f'Password auto-generated via forgot password for {customer.full_name}')
+    notify_customer(customer.id, 'Password Recovered',
+        'Your password has been recovered by bank staff.')
     db.session.commit()
-    log_audit('customer_password_forgot', 'customer', customer.id, f'Password reset via forgot password for {customer.full_name}')
     return jsonify({'message': 'Identity verified. Password has been reset.', 'temporary_password': temp_password})
 
 # ===== TRANSACTION ENDPOINTS =====
@@ -919,6 +985,7 @@ def api_deposit():
     account.balance = new_balance
     account.last_transaction_date = _utcnow()
     account.total_deposits += amount
+    ref = _next_reference('DEP')
     txn = Transaction(
         transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
         account_id=account.id,
@@ -927,15 +994,17 @@ def api_deposit():
         balance_after=new_balance,
         description=description or 'Deposit',
         status='successful',
-        reference_number=f"DEP-{uuid.uuid4().hex[:8].upper()}",
+        reference_number=ref,
         created_by=g.user.id if g.user else None
     )
     db.session.add(txn)
-    log_audit('deposit', 'transaction', txn.id, f'Deposit of {amount} to account {account_number}. Ref: {txn.reference_number}')
+    log_audit('deposit', 'transaction', txn.id, f'Deposit of {amount} to account {account_number}. Ref: {ref}')
+    cust = account.customer
+    cust_name = cust.full_name if cust else 'Unknown'
     notify_customer(account.customer_id, 'Deposit Successful',
-        f'NPR {float(amount):,.2f} has been deposited to account {account_number}. Balance: NPR {float(new_balance):,.2f}')
+        f'NPR {float(amount):,.2f} deposited to {cust_name} ({account_number}). Ref: {ref}')
     db.session.commit()
-    return jsonify({'message': 'Deposit successful', 'transaction': _serialize_transaction(txn)})
+    return jsonify({'message': 'Deposit successful', 'reference': ref, 'transaction': _serialize_transaction(txn)})
 
 @api_bp.route('/transactions/withdraw', methods=['POST'])
 @staff_or_admin_required
@@ -961,6 +1030,7 @@ def api_withdraw():
     account.balance = new_balance
     account.last_transaction_date = _utcnow()
     account.total_withdrawals += amount
+    ref = _next_reference('WTH')
     txn = Transaction(
         transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
         account_id=account.id,
@@ -969,15 +1039,17 @@ def api_withdraw():
         balance_after=new_balance,
         description=description or 'Withdrawal',
         status='successful',
-        reference_number=f"WTH-{uuid.uuid4().hex[:8].upper()}",
+        reference_number=ref,
         created_by=g.user.id if g.user else None
     )
     db.session.add(txn)
-    log_audit('withdrawal', 'transaction', txn.id, f'Withdrawal of {amount} from account {account_number}. Ref: {txn.reference_number}')
+    log_audit('withdrawal', 'transaction', txn.id, f'Withdrawal of {amount} from account {account_number}. Ref: {ref}')
+    cust = account.customer
+    cust_name = cust.full_name if cust else 'Unknown'
     notify_customer(account.customer_id, 'Withdrawal Successful',
-        f'NPR {float(amount):,.2f} has been withdrawn from account {account_number}. Balance: NPR {float(new_balance):,.2f}')
+        f'NPR {float(amount):,.2f} withdrawn from {cust_name} ({account_number}). Ref: {ref}')
     db.session.commit()
-    return jsonify({'message': 'Withdrawal successful', 'transaction': _serialize_transaction(txn)})
+    return jsonify({'message': 'Withdrawal successful', 'reference': ref, 'transaction': _serialize_transaction(txn)})
 
 @api_bp.route('/transactions/filter', methods=['GET'])
 @staff_or_admin_required
@@ -1070,6 +1142,7 @@ def api_approve_loan(loan_id):
         loan.approved_date = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         loan.approved_by = session.get('user_id')
         active_account.balance += loan.amount
+        lnd_ref = _next_reference('LND')
         txn = Transaction(
             account_id=active_account.id,
             type='deposit',
@@ -1077,7 +1150,7 @@ def api_approve_loan(loan_id):
             balance_after=active_account.balance,
             description=f"Loan Disbursement ({loan.loan_number})",
             status='successful',
-            reference_number=f"LND-{uuid.uuid4().hex[:8].upper()}",
+            reference_number=lnd_ref,
             created_by=session.get('user_id')
         )
         db.session.add(txn)
@@ -1138,6 +1211,7 @@ def api_repay_loan(loan_id):
             loan.total_paid = loan.total_payable
         if payment_method == 'account' and active_account:
             active_account.balance -= amount
+            lnr_ref = _next_reference('LNR')
             txn = Transaction(
                 account_id=active_account.id,
                 type='withdrawal',
@@ -1145,7 +1219,7 @@ def api_repay_loan(loan_id):
                 balance_after=active_account.balance,
                 description=f"Loan Repayment ({loan.loan_number})",
                 status='successful',
-                reference_number=f"LNR-{uuid.uuid4().hex[:8].upper()}",
+                reference_number=lnr_ref,
                 created_by=session.get('user_id')
             )
             db.session.add(txn)
@@ -1425,9 +1499,7 @@ def api_delete_staff(user_id):
 @api_bp.route('/customer/dashboard', methods=['GET'])
 @customer_login_required_api
 def api_customer_dashboard():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     accounts = Account.query.filter_by(customer_id=customer.id, status='active').all()
     total_balance = sum((acc.balance or Decimal('0')) for acc in accounts)
     total_deposits = Decimal('0')
@@ -1506,9 +1578,7 @@ def api_customer_dashboard():
 @api_bp.route('/customer/accounts', methods=['GET'])
 @customer_login_required_api
 def api_customer_accounts():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     accounts = Account.query.filter_by(customer_id=customer.id).order_by(Account.created_at.desc()).all()
     return jsonify({'accounts': [_serialize_account(a) for a in accounts]})
 
@@ -1516,9 +1586,7 @@ def api_customer_accounts():
 @customer_login_required_api
 def api_customer_account_apply():
     try:
-        customer = db.session.get(Customer, session['customer_id'])
-        if not customer:
-            return jsonify({'error': 'Customer not found'}), 404
+        customer = g.current_customer
         data = request.get_json(silent=True) or request.form
         account_type = (data.get('account_type') or '').strip().lower()
         valid_types = ['savings', 'current', 'fixed_deposit']
@@ -1569,9 +1637,7 @@ def api_activate_account(account_id):
 @api_bp.route('/customer/loans', methods=['GET'])
 @customer_login_required_api
 def api_customer_loans():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     loans = Loan.query.filter_by(customer_id=customer.id).order_by(Loan.applied_date.desc()).all()
     return jsonify({'loans': [_serialize_loan(l) for l in loans]})
 
@@ -1579,9 +1645,7 @@ def api_customer_loans():
 @customer_login_required_api
 def api_customer_loan_apply():
     try:
-        customer = db.session.get(Customer, session['customer_id'])
-        if not customer:
-            return jsonify({'error': 'Customer not found'}), 404
+        customer = g.current_customer
         data = request.get_json(silent=True) or request.form
         amount_str = data.get('amount')
         interest_rate_str = data.get('interest_rate')
@@ -1617,9 +1681,7 @@ def api_customer_loan_apply():
 @customer_login_required_api
 def api_customer_repay_loan(loan_id):
     try:
-        customer = db.session.get(Customer, session['customer_id'])
-        if not customer:
-            return jsonify({'error': 'Customer not found'}), 404
+        customer = g.current_customer
         loan = db.session.get(Loan, loan_id)
         if not loan or loan.customer_id != customer.id:
             return jsonify({'error': 'Loan not found'}), 404
@@ -1650,6 +1712,7 @@ def api_customer_repay_loan(loan_id):
             loan.status = 'fully_paid'
             loan.total_paid = loan.total_payable
         active_account.balance -= amount
+        lnr_ref = _next_reference('LNR')
         txn = Transaction(
             account_id=active_account.id,
             type='withdrawal',
@@ -1657,8 +1720,8 @@ def api_customer_repay_loan(loan_id):
             balance_after=active_account.balance,
             description=f"Loan Repayment ({loan.loan_number})",
             status='successful',
-            reference_number=f"LNR-{uuid.uuid4().hex[:8].upper()}",
-            created_by=session['customer_id']
+            reference_number=lnr_ref,
+            created_by=g.current_customer.id
         )
         db.session.add(txn)
         emi_cnt = len(loan.repayments) + 1
@@ -1667,7 +1730,7 @@ def api_customer_repay_loan(loan_id):
             amount=amount,
             emi_number=emi_cnt,
             status='paid',
-            received_by=session['customer_id']
+            received_by=g.current_customer.id
         )
         db.session.add(repay)
         log_audit('emi_collection', 'repayment', repay.id, f'EMI #{emi_cnt} of NPR {float(amount):,.2f} collected from customer {customer.full_name} for loan {loan.loan_number}')
@@ -1683,9 +1746,7 @@ def api_customer_repay_loan(loan_id):
 @customer_login_required_api
 def api_customer_transfer():
     try:
-        customer = db.session.get(Customer, session['customer_id'])
-        if not customer:
-            return jsonify({'error': 'Customer not found'}), 404
+        customer = g.current_customer
         data = request.get_json(silent=True) or request.form
         from_account_id = data.get('from_account_id')
         to_account_number = data.get('to_account_number')
@@ -1709,49 +1770,64 @@ def api_customer_transfer():
             return jsonify({'error': 'Target account not found'}), 404
         if from_account.id == to_account.id:
             return jsonify({'error': 'Cannot transfer to the same account'}), 400
-        ref = f"TRF-{uuid.uuid4().hex[:8].upper()}"
+        ref = _next_reference('TRF')
         from_balance = from_account.balance - amount
         from_account.balance = from_balance
         from_account.last_transaction_date = _utcnow()
         from_account.total_withdrawals += amount
+        from_desc = description or f"Transfer to {to_account_number}"
         tx_out = Transaction(
             transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
             account_id=from_account.id,
             type='transfer_out',
             amount=amount,
             balance_after=from_balance,
-            description=description or f"Transfer to {to_account_number}",
+            description=from_desc,
             status='successful',
             reference_number=ref,
-            created_by=session['customer_id']
+            created_by=g.current_customer.id
         )
         db.session.add(tx_out)
         to_balance = to_account.balance + amount
         to_account.balance = to_balance
         to_account.last_transaction_date = _utcnow()
         to_account.total_deposits += amount
+        to_desc = description or f"Transfer from {from_account.account_number}"
         tx_in = Transaction(
             transaction_uuid=f"TXN-{uuid.uuid4().hex[:12].upper()}",
             account_id=to_account.id,
             type='transfer_in',
             amount=amount,
             balance_after=to_balance,
-            description=description or f"Transfer from {from_account.account_number}",
+            description=to_desc,
             status='successful',
             reference_number=ref,
-            created_by=session['customer_id']
+            created_by=g.current_customer.id
         )
         db.session.add(tx_in)
         log_audit('transfer', 'transaction', tx_out.id,
             f'Transfer of {amount} from account {from_account.account_number} to {to_account_number}. Ref: {ref}')
+        from_cust_name = customer.full_name
+        to_cust = db.session.get(Customer, to_account.customer_id)
+        to_cust_name = to_cust.full_name if to_cust else 'Unknown'
         notify_customer(customer.id, 'Transfer Sent',
-            f'NPR {float(amount):,.2f} sent to account {to_account_number}. Ref: {ref}')
-        to_customer = db.session.get(Customer, to_account.customer_id)
-        if to_customer:
-            notify_customer(to_customer.id, 'Transfer Received',
-                f'NPR {float(amount):,.2f} received from {customer.full_name} ({from_account.account_number}). Ref: {ref}')
+            f'NPR {float(amount):,.2f} sent to {to_cust_name} ({to_account_number}). Ref: {ref}')
+        if to_cust:
+            notify_customer(to_cust.id, 'Transfer Received',
+                f'NPR {float(amount):,.2f} received from {from_cust_name} ({from_account.account_number}). Ref: {ref}')
         db.session.commit()
-        return jsonify({'message': 'Transfer successful', 'reference': ref})
+        return jsonify({'message': 'Transfer successful', 'reference': ref,
+            'transaction': {
+                'reference': ref,
+                'from_account': from_account.account_number,
+                'to_account': to_account_number,
+                'amount': float(amount),
+                'from_balance_after': float(from_balance),
+                'to_balance_after': float(to_balance),
+                'from_customer': from_cust_name,
+                'to_customer': to_cust_name,
+                'timestamp': _utcnow().isoformat()
+            }})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -1759,9 +1835,7 @@ def api_customer_transfer():
 @api_bp.route('/customer/transactions', methods=['GET'])
 @customer_login_required_api
 def api_customer_transactions():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     account_ids = [acc.id for acc in Account.query.filter_by(customer_id=customer.id).all()]
     if not account_ids:
         return jsonify({'transactions': []})
@@ -1784,17 +1858,13 @@ def api_customer_transactions():
 @api_bp.route('/customer/profile', methods=['GET'])
 @customer_login_required_api
 def api_customer_profile():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     return jsonify({'customer': _serialize_customer(customer)})
 
 @api_bp.route('/customer/profile/update', methods=['POST'])
 @customer_login_required_api
 def api_customer_profile_update():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     data = request.get_json(silent=True) or request.form
     email = (data.get('email') or '').strip()
     alternate_mobile = (data.get('alternate_mobile') or '').strip()
@@ -1811,33 +1881,43 @@ def api_customer_profile_update():
         customer.permanent_address = permanent_address
     if temporary_address:
         customer.temporary_address = temporary_address
+    db.session.flush()
+    log_audit('customer_profile_updated', 'customer', customer.id,
+        f'Profile updated by customer {customer.full_name}')
+    notify_customer(customer.id, 'Profile Updated',
+        'Your profile has been updated successfully.')
     db.session.commit()
     return jsonify({'message': 'Profile updated', 'customer': _serialize_customer(customer)})
 
 @api_bp.route('/customer/change-password', methods=['POST'])
 @customer_login_required_api
 def api_customer_change_password():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     data = request.get_json(silent=True) or request.form
     current_password = data.get('current_password', '')
     new_password = data.get('new_password', '')
     if not customer.check_password(current_password):
         return jsonify({'error': 'Current password is incorrect'}), 400
-    if not new_password or len(new_password) < 4:
-        return jsonify({'error': 'New password must be at least 4 characters'}), 400
+    if not new_password or len(new_password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    has_letter = any(c.isalpha() for c in new_password)
+    has_digit = any(c.isdigit() for c in new_password)
+    has_special = any(not c.isalnum() for c in new_password)
+    if not (has_letter and has_digit and has_special):
+        return jsonify({'error': 'Password must contain letters, numbers, and special characters'}), 400
     customer.set_password(new_password)
-    customer.must_change_password = False
+    db.session.flush()
+    log_audit('customer_password_changed', 'customer', customer.id,
+        f'Password changed by customer {customer.full_name}')
+    notify_customer(customer.id, 'Password Updated',
+        'Your password has been updated successfully.')
     db.session.commit()
-    return jsonify({'message': 'Password changed successfully'})
+    return jsonify({'message': 'Password updated successfully.'})
 
 @api_bp.route('/customer/confirm-contact', methods=['POST'])
 @customer_login_required_api
 def api_customer_confirm_contact():
-    customer = db.session.get(Customer, session['customer_id'])
-    if not customer:
-        return jsonify({'error': 'Customer not found'}), 404
+    customer = g.current_customer
     data = request.get_json(silent=True) or request.form
     mobile = (data.get('phone_number') or '').strip()
     email = (data.get('email') or '').strip()
@@ -1856,7 +1936,9 @@ def api_customer_confirm_contact():
 @api_login_required
 def api_list_notifications():
     query = Notification.query
-    if 'customer_id' in session:
+    if hasattr(g, 'current_customer') and g.current_customer:
+        query = query.filter_by(customer_id=g.current_customer.id)
+    elif 'customer_id' in session:
         query = query.filter_by(customer_id=session['customer_id'])
     elif 'user_id' in session:
         query = query.filter_by(user_id=session['user_id'])
@@ -1866,6 +1948,14 @@ def api_list_notifications():
     if unread_only:
         query = query.filter_by(is_read=False)
     notifications = query.order_by(Notification.created_at.desc()).all()
+    customer_id_val = g.current_customer.id if (hasattr(g, 'current_customer') and g.current_customer) else session.get('customer_id')
+    user_id_val = session.get('user_id')
+    unread_filters = []
+    if customer_id_val:
+        unread_filters.append(Notification.customer_id == customer_id_val)
+    if user_id_val:
+        unread_filters.append(Notification.user_id == user_id_val)
+    unread_count = Notification.query.filter_by(is_read=False).filter(*unread_filters).count() if unread_filters else 0
     return jsonify({
         'notifications': [{
             'id': n.id,
@@ -1875,19 +1965,18 @@ def api_list_notifications():
             'is_read': n.is_read,
             'created_at': n.created_at.isoformat() if n.created_at else None
         } for n in notifications],
-        'unread_count': Notification.query.filter_by(is_read=False).filter(
-            *([Notification.customer_id == session['customer_id']] if 'customer_id' in session else []),
-            *([Notification.user_id == session['user_id']] if 'user_id' in session else [])
-        ).count()
+        'unread_count': unread_count
     })
 
 @api_bp.route('/notifications/<int:notification_id>/read', methods=['POST'])
 @api_login_required
 def api_mark_notification_read(notification_id):
     notif = Notification.query.get_or_404(notification_id)
-    if 'customer_id' in session and notif.customer_id != session['customer_id']:
+    customer_id_val = g.current_customer.id if (hasattr(g, 'current_customer') and g.current_customer) else session.get('customer_id')
+    user_id_val = session.get('user_id')
+    if customer_id_val and notif.customer_id != customer_id_val:
         return jsonify({'error': 'Access denied'}), 403
-    if 'user_id' in session and notif.user_id != session['user_id']:
+    if user_id_val and notif.user_id != user_id_val:
         return jsonify({'error': 'Access denied'}), 403
     notif.is_read = True
     db.session.commit()
@@ -1896,11 +1985,13 @@ def api_mark_notification_read(notification_id):
 @api_bp.route('/notifications/read-all', methods=['POST'])
 @api_login_required
 def api_mark_all_read():
+    customer_id_val = g.current_customer.id if (hasattr(g, 'current_customer') and g.current_customer) else session.get('customer_id')
+    user_id_val = session.get('user_id')
     query = Notification.query.filter_by(is_read=False)
-    if 'customer_id' in session:
-        query = query.filter_by(customer_id=session['customer_id'])
-    elif 'user_id' in session:
-        query = query.filter_by(user_id=session['user_id'])
+    if customer_id_val:
+        query = query.filter_by(customer_id=customer_id_val)
+    elif user_id_val:
+        query = query.filter_by(user_id=user_id_val)
     else:
         return jsonify({'error': 'Not authenticated'}), 401
     query.update({'is_read': True})
@@ -1910,16 +2001,32 @@ def api_mark_all_read():
 @api_bp.route('/notifications/clear', methods=['POST'])
 @api_login_required
 def api_clear_notifications():
+    customer_id_val = g.current_customer.id if (hasattr(g, 'current_customer') and g.current_customer) else session.get('customer_id')
+    user_id_val = session.get('user_id')
     query = Notification.query
-    if 'customer_id' in session:
-        query = query.filter_by(customer_id=session['customer_id'])
-    elif 'user_id' in session:
-        query = query.filter_by(user_id=session['user_id'])
+    if customer_id_val:
+        query = query.filter_by(customer_id=customer_id_val)
+    elif user_id_val:
+        query = query.filter_by(user_id=user_id_val)
     else:
         return jsonify({'error': 'Not authenticated'}), 401
     query.delete()
     db.session.commit()
     return jsonify({'message': 'Notifications cleared'})
+
+@api_bp.route('/notifications/<int:notification_id>/clear', methods=['POST'])
+@api_login_required
+def api_clear_notification(notification_id):
+    notif = Notification.query.get_or_404(notification_id)
+    customer_id_val = g.current_customer.id if (hasattr(g, 'current_customer') and g.current_customer) else session.get('customer_id')
+    user_id_val = session.get('user_id')
+    if customer_id_val and notif.customer_id != customer_id_val:
+        return jsonify({'error': 'Access denied'}), 403
+    if user_id_val and notif.user_id != user_id_val:
+        return jsonify({'error': 'Access denied'}), 403
+    db.session.delete(notif)
+    db.session.commit()
+    return jsonify({'message': 'Notification cleared'})
 
 # ===== AUDIT LOGS =====
 

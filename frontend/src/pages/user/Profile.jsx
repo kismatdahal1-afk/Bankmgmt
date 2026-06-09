@@ -70,12 +70,23 @@ export default function UserProfile() {
     e.preventDefault()
     setPwError('')
     setPwSuccess('')
+    if (!pwData.current_password) {
+      setPwError('Current password is required')
+      return
+    }
     if (pwData.new_password !== pwData.confirm_password) {
       setPwError('Passwords do not match')
       return
     }
-    if (pwData.new_password.length < 4) {
-      setPwError('Password must be at least 4 characters')
+    if (pwData.new_password.length < 6) {
+      setPwError('Password must be at least 6 characters')
+      return
+    }
+    const hasLetter = /[a-zA-Z]/.test(pwData.new_password)
+    const hasDigit = /\d/.test(pwData.new_password)
+    const hasSpecial = /[^a-zA-Z0-9]/.test(pwData.new_password)
+    if (!(hasLetter && hasDigit && hasSpecial)) {
+      setPwError('Password must contain letters, numbers, and special characters')
       return
     }
     try {
@@ -84,11 +95,12 @@ export default function UserProfile() {
         new_password: pwData.new_password
       })
       if (res.data.error) { setPwError(res.data.error); return }
-      setPwSuccess('Password changed successfully!')
+      setPwSuccess('Password updated successfully.')
       setPwData({ current_password: '', new_password: '', confirm_password: '' })
       setPwForm(false)
     } catch (err) {
-      setPwError('Failed to change password')
+      const msg = err.response?.data?.error || 'Failed to change password'
+      setPwError(msg)
     }
   }
 

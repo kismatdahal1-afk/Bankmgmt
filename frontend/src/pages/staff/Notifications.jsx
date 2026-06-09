@@ -1,32 +1,30 @@
 import React, { useState, useEffect } from 'react'
-import api from '../../services/api'
 import NotificationItem from '../../components/notifications/NotificationItem'
 import EmptyState from '../../components/common/EmptyState'
 
-export default function UserNotifications() {
+export default function StaffNotifications() {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
 
+  useEffect(() => { fetchNotifications() }, [])
+
   const fetchNotifications = () => {
-    api.get('/notifications/')
-      .then(r => { setNotifications(r.data.notifications || []); setLoading(false) })
+    fetch('/api/notifications/', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setNotifications(d.notifications || []); setLoading(false) })
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { fetchNotifications() }, [])
-
   const handleMarkRead = async (id) => {
     try {
-      await api.post(`/notifications/${id}/read`)
+      await fetch(`/api/notifications/${id}/read`, { method: 'POST', credentials: 'include' })
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
-    } catch (e) {
-      console.error(e)
-    }
+    } catch (e) { console.error(e) }
   }
 
   const handleMarkAllRead = async () => {
     try {
-      await api.post('/notifications/read-all')
+      await fetch('/api/notifications/read-all', { method: 'POST', credentials: 'include' })
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
     } catch (e) { console.error(e) }
   }
@@ -34,14 +32,14 @@ export default function UserNotifications() {
   const handleClear = async () => {
     if (!confirm('Clear all notifications?')) return
     try {
-      await api.post('/notifications/clear')
+      await fetch('/api/notifications/clear', { method: 'POST', credentials: 'include' })
       setNotifications([])
     } catch (e) { console.error(e) }
   }
 
   const handleClearSingle = async (id) => {
     try {
-      await api.post(`/notifications/${id}/clear`)
+      await fetch(`/api/notifications/${id}/clear`, { method: 'POST', credentials: 'include' })
       setNotifications(prev => prev.filter(n => n.id !== id))
     } catch (e) { console.error(e) }
   }
@@ -52,10 +50,10 @@ export default function UserNotifications() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <div className="page-title">Notifications</div>
-          <div className="page-subtitle">Stay updated on your account activity.</div>
+      <div className="top-header">
+        <div className="header-title">
+          <h1>Notifications</h1>
+          <p>System notifications and alerts</p>
         </div>
       </div>
 

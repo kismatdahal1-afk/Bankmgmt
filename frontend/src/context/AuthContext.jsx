@@ -35,11 +35,11 @@ export function AuthProvider({ children }) {
       if (portal === 'customer') {
         sessionStorage.setItem('customer_id', data.customer_id)
         sessionStorage.setItem('customer_name', data.customer_name)
-        sessionStorage.setItem('must_change_password', data.must_change_password ? 'true' : 'false')
         sessionStorage.setItem('customer_phone', data.phone_number || '')
         sessionStorage.setItem('customer_email', data.email || '')
+        if (data.auth_token) sessionStorage.setItem('auth_token', data.auth_token)
         setCustomer({ id: data.customer_id, name: data.customer_name, phone_number: data.phone_number, email: data.email })
-        return { role: 'customer', must_change_password: data.must_change_password }
+        return { role: 'customer' }
       }
       sessionStorage.setItem('user_id', data.user_id)
       sessionStorage.setItem('username', data.username)
@@ -62,7 +62,10 @@ export function AuthProvider({ children }) {
 
   const customerLogout = async () => {
     try {
-      await api.post('/customer/logout')
+      const token = sessionStorage.getItem('auth_token')
+      await api.post('/customer/logout', {}, {
+        headers: token ? { 'X-Auth-Token': token } : {}
+      })
     } catch (e) { /* ignore */ }
     sessionStorage.clear()
     setUser(null)
@@ -77,7 +80,6 @@ export function AuthProvider({ children }) {
         const c = data.customer
         sessionStorage.setItem('customer_id', c.id)
         sessionStorage.setItem('customer_name', c.full_name)
-        sessionStorage.setItem('must_change_password', c.must_change_password ? 'true' : 'false')
         sessionStorage.setItem('customer_phone', c.phone_number || '')
         sessionStorage.setItem('customer_email', c.email || '')
         setCustomer({ id: c.id, name: c.full_name, phone_number: c.phone_number, email: c.email })

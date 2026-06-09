@@ -7,8 +7,13 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
+  const authHeaders = () => {
+    const token = sessionStorage.getItem('auth_token')
+    return token ? { 'X-Auth-Token': token } : {}
+  }
+
   const fetchUnread = () => {
-    fetch('/api/notifications/?unread=true')
+    fetch('/api/notifications/?unread=true', { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         setUnread(d.unread_count || 0)
@@ -31,14 +36,14 @@ export default function NotificationBell() {
 
   const markRead = async (id) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'POST' })
+      await fetch(`/api/notifications/${id}/read`, { method: 'POST', headers: authHeaders() })
       fetchUnread()
     } catch (e) { console.error(e) }
   }
 
   const markAllRead = async () => {
     try {
-      await fetch('/api/notifications/read-all', { method: 'POST' })
+      await fetch('/api/notifications/read-all', { method: 'POST', headers: authHeaders() })
       setUnread(0)
       setItems([])
     } catch (e) { console.error(e) }

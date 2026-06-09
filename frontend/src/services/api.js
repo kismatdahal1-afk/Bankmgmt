@@ -5,8 +5,22 @@ const api = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
   },
 })
+
+api.interceptors.request.use(
+  (config) => {
+    const token = sessionStorage.getItem('auth_token')
+    if (token) {
+      config.headers['X-Auth-Token'] = token
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
 
 api.interceptors.response.use(
   (response) => response,

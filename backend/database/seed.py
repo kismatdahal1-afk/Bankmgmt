@@ -54,7 +54,7 @@ def init_database():
                 nominee_contact='9876543211',
                 nominee_relationship='Spouse',
                 username=username,
-                must_change_password=True
+                must_change_password=False
             )
             customer.set_password('password123')
             db.session.add(customer)

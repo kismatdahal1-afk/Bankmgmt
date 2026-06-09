@@ -225,9 +225,15 @@ export default function UserTransactions() {
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Status</span>
                   <StatusBadge status={receipt.status || 'successful'} />
                 </div>
+                {receipt.customer_name && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Customer</span>
+                    <span style={{ fontWeight: 600, color: '#fff' }}>{receipt.customer_name}</span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Account</span>
-                  <span style={{ fontWeight: 600, color: '#fff', fontFamily: 'monospace' }}>{receipt.account?.account_number}</span>
+                  <span style={{ fontWeight: 600, color: '#fff', fontFamily: 'monospace' }}>{receipt.account_number || receipt.account?.account_number}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Amount</span>

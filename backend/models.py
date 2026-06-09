@@ -178,6 +178,39 @@ class Notification(db.Model):
         return f"<Notification #{self.id} - {self.title}>"
 
 
+class CustomerToken(db.Model):
+    """Per-tab auth token for customer session isolation."""
+    __tablename__ = 'customer_tokens'
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+    customer = db.relationship('Customer', backref='auth_tokens', lazy=True)
+
+    def __repr__(self):
+        return f"<CustomerToken #{self.id} for customer {self.customer_id}>"
+
+
+class ReferenceSequence(db.Model):
+    """Global sequential counter for transaction reference numbers."""
+    __tablename__ = 'reference_sequence'
+
+    id = db.Column(db.Integer, primary_key=True)
+    counter = db.Column(db.BigInteger, default=0, nullable=False)
+
+    @classmethod
+    def next_value(cls):
+        from sqlalchemy import text
+        seq = cls.query.with_for_update().first()
+        if not seq:
+            seq = cls(counter=0)
+            db.session.add(seq)
+        seq.counter += 1
+        return seq.counter
+
+
 class AuditLog(db.Model):
     """Audit trail for all critical system actions."""
     __tablename__ = 'audit_logs'

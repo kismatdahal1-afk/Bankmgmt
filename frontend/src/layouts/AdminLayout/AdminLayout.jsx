@@ -35,6 +35,7 @@ export default function AdminLayout() {
           <li><NavLink to="/admin/staff"><span className="material-symbols-rounded">badge</span>Staff</NavLink></li>
           <li><NavLink to="/admin/settings"><span className="material-symbols-rounded">settings</span>Settings</NavLink></li>
           <li><NavLink to="/admin/audit-logs"><span className="material-symbols-rounded">monitor_heart</span>Audit Logs</NavLink></li>
+          <li><NavLink to="/admin/notifications"><span className="material-symbols-rounded">notifications</span>Notifications</NavLink></li>
         </ul>
         <div className="sidebar-footer">
           <div className="user-info" style={{ justifyContent: 'space-between', width: '100%' }}>
