@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
+import ReceiptView, { buildPrintHTML } from '../../components/common/ReceiptView'
 
 export default function AdminTransactions() {
   const [transactions, setTransactions] = useState([])
@@ -10,6 +11,9 @@ export default function AdminTransactions() {
   const [filterStatus, setFilterStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [receiptTxn, setReceiptTxn] = useState(null)
+  const [receiptData, setReceiptData] = useState(null)
+  const [receiptLoading, setReceiptLoading] = useState(false)
 
   const fetchTransactions = useCallback(async (url = '/api/transactions/') => {
     setLoading(true)
@@ -21,7 +25,30 @@ export default function AdminTransactions() {
     setLoading(false)
   }, [])
 
+  const fetchReceipt = async (txn) => {
+    setReceiptTxn(txn)
+    setReceiptData(null)
+    setReceiptLoading(true)
+    try {
+      const r = await fetch(`/api/transactions/${txn.id}/receipt`)
+      const d = await r.json()
+      if (d.receipt) setReceiptData(d.receipt)
+    } catch (e) { console.error(e) }
+    setReceiptLoading(false)
+  }
+
+  const closeReceipt = () => { setReceiptTxn(null); setReceiptData(null) }
+
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
+
+  useEffect(() => {
+    if (receiptTxn) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [receiptTxn])
 
   const handleFilter = () => {
     const params = new URLSearchParams()
@@ -139,7 +166,7 @@ export default function AdminTransactions() {
           </thead>
           <tbody>
             {transactions.length > 0 ? transactions.map(txn => (
-              <tr key={txn.id}>
+              <tr key={txn.id} onClick={() => fetchReceipt(txn)} style={{ cursor: 'pointer' }}>
                 <td><code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{txn.transaction_uuid}</code></td>
                 <td style={{ fontSize: '0.85rem' }}>{formatDateTime(txn.created_at)}</td>
                 <td>
@@ -165,6 +192,40 @@ export default function AdminTransactions() {
           </tbody>
         </table>
       </div>
+
+      {receiptTxn && (
+        <div className="modal-overlay" onClick={closeReceipt}>
+          <div className="modal-receipt-wrap" onClick={e => e.stopPropagation()}>
+            {receiptLoading ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
+              </div>
+            ) : receiptData ? (
+              <ReceiptView receipt={receiptData} showActions onClose={closeReceipt} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <style>{`
+        .modal-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000; padding: 20px;
+        }
+        .modal-receipt-wrap {
+          width: 100%; max-width: 680px;
+          max-height: 85vh; overflow-y: auto;
+        }
+        .modal-receipt-wrap::-webkit-scrollbar { width: 6px; }
+        .modal-receipt-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+      `}</style>
     </>
   )
 }

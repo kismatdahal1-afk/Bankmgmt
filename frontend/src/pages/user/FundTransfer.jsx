@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
@@ -40,8 +40,13 @@ export default function FundTransfer() {
         amount,
         description
       })
-      setSuccess(`${res.data.message}. Ref: ${res.data.reference}`)
-      setTimeout(() => navigate('/user/transactions'), 2000)
+      const tx = res.data.transaction
+      navigate('/user/transfer/success', {
+        state: {
+          transferData: tx,
+          reference: tx.reference
+        }
+      })
     } catch (err) {
       setError(err.response?.data?.error || 'Transfer failed')
     } finally {

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
+import ReceiptView, { buildPrintHTML } from '../../components/common/ReceiptView'
 
 export default function UserTransactions() {
   const [transactions, setTransactions] = useState([])
@@ -11,7 +12,8 @@ export default function UserTransactions() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [receipt, setReceipt] = useState(null)
-  const printRef = useRef()
+  const [receiptData, setReceiptData] = useState(null)
+  const [receiptLoading, setReceiptLoading] = useState(false)
 
   const buildUrl = () => {
     const params = new URLSearchParams()
@@ -30,7 +32,7 @@ export default function UserTransactions() {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReset = () => {
     setFilterType('')
@@ -59,6 +61,17 @@ export default function UserTransactions() {
     a.download = `transactions_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
   }
+
+  const closeReceipt = () => { setReceipt(null); setReceiptData(null) }
+
+  useEffect(() => {
+    if (receipt) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [receipt])
 
   const exportPDF = () => {
     const printWindow = window.open('', '_blank')
@@ -96,11 +109,54 @@ export default function UserTransactions() {
         <div class="footer">Village Bank &middot; Confidential</div>
         <script>
           window.onload = function() { window.print(); window.close(); }
-        <\/script>
+        </script>
       </body>
       </html>
     `)
     printWindow.document.close()
+  }
+
+  const fetchReceipt = (txn) => {
+    setReceiptLoading(true)
+    setReceiptData(null)
+    if (txn.type === 'transfer_out' || txn.type === 'transfer_in') {
+      if (txn.reference_number) {
+        api.get(`/customer/transaction-receipt/${txn.reference_number}`)
+          .then(r => { setReceiptData(r.data.receipt); setReceiptLoading(false) })
+          .catch(() => setReceiptLoading(false))
+        return
+      }
+    }
+    const now = new Date(txn.created_at)
+    setReceiptData({
+      reference: txn.reference_number || txn.transaction_uuid,
+      transaction_type: txn.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      status: txn.status || 'successful',
+      date: now.toISOString().slice(0, 10),
+      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      from_account: txn.account_number || txn.account?.account_number || '',
+      from_customer: txn.customer_name || '',
+      to_account: '',
+      to_customer: '',
+      amount: Number(txn.amount),
+      remaining_balance: Number(txn.balance_after),
+      description: txn.description || ''
+    })
+    setReceiptLoading(false)
+  }
+
+  const handleViewReceipt = () => {
+    if (!receiptData) return
+    const w = window.open('', '_blank')
+    w.document.write(buildPrintHTML(receiptData))
+    w.document.close()
+  }
+
+  const handleDownloadPDF = () => {
+    if (!receiptData) return
+    const w = window.open('', '_blank')
+    w.document.write(buildPrintHTML(receiptData, true))
+    w.document.close()
   }
 
   return (
@@ -175,7 +231,7 @@ export default function UserTransactions() {
               <tr><td colSpan="6"><div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div></td></tr>
             ) : transactions.length > 0 ? (
               transactions.map((txn, i) => (
-                <tr key={i} onClick={() => setReceipt(txn)} style={{ cursor: 'pointer' }}>
+                <tr key={i} onClick={() => { setReceipt(txn); fetchReceipt(txn); }} style={{ cursor: 'pointer' }}>
                   <td className="text-muted">{formatDateTime(txn.created_at)}</td>
                   <td className="mono">{txn.account?.account_number}</td>
                   <td><StatusBadge status={txn.type} /></td>
@@ -201,58 +257,27 @@ export default function UserTransactions() {
       </div>
 
       {receipt && (
-        <div className="modal-overlay" onClick={() => setReceipt(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Transaction Receipt</h2>
-              <button className="modal-close" onClick={() => setReceipt(null)}><span className="material-symbols-rounded">close</span></button>
-            </div>
-            <div className="modal-body">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Reference</span>
-                  <span style={{ fontWeight: 600, color: '#fff', fontFamily: 'monospace', fontSize: '0.85rem' }}>{receipt.reference_number || receipt.transaction_uuid}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Date & Time</span>
-                  <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.85rem' }}>{formatDateTime(receipt.created_at)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Type</span>
-                  <StatusBadge status={receipt.type} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Status</span>
-                  <StatusBadge status={receipt.status || 'successful'} />
-                </div>
-                {receipt.customer_name && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Customer</span>
-                    <span style={{ fontWeight: 600, color: '#fff' }}>{receipt.customer_name}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Account</span>
-                  <span style={{ fontWeight: 600, color: '#fff', fontFamily: 'monospace' }}>{receipt.account_number || receipt.account?.account_number}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Amount</span>
-                  <span style={{ fontWeight: 700, fontSize: '1.1rem', color: receipt.type === 'deposit' || receipt.type === 'transfer_in' ? 'var(--success)' : 'var(--danger)' }}>
-                    {receipt.type === 'deposit' || receipt.type === 'transfer_in' ? '+' : '\u2212'} {formatCurrency(receipt.amount)}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Balance After</span>
-                  <span style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(receipt.balance_after)}</span>
-                </div>
-                {receipt.description && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Description</span>
-                    <span style={{ fontWeight: 500, color: '#fff', textAlign: 'right', maxWidth: '220px' }}>{receipt.description}</span>
-                  </div>
-                )}
+        <div className="modal-overlay" onClick={closeReceipt}>
+          <div className="modal-receipt-wrap" onClick={e => e.stopPropagation()}>
+            {receiptLoading ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
               </div>
-            </div>
+            ) : receiptData ? (
+              <ReceiptView
+                receipt={receiptData}
+                showActions={true}
+                onViewReceipt={handleViewReceipt}
+                onDownloadPDF={handleDownloadPDF}
+                onClose={closeReceipt}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -260,22 +285,16 @@ export default function UserTransactions() {
       <style>{`
         .modal-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-          display: flex; align-items: center; justify-content: center; z-index: 1000;
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000; padding: 20px;
         }
-        .modal {
-          background: #151a22; border: 1px solid var(--border-color);
-          border-radius: 12px; width: 100%; max-width: 440px; padding: 0;
+        .modal-receipt-wrap {
+          width: 100%; max-width: 680px;
+          max-height: 85vh; overflow-y: auto;
         }
-        .modal-header {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 18px 24px; border-bottom: 1px solid var(--border-color);
-        }
-        .modal-header h2 { margin: 0; font-size: 1.1rem; color: #fff; }
-        .modal-close {
-          background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px;
-        }
-        .modal-close:hover { color: #fff; }
-        .modal-body { padding: 24px; }
+        .modal-receipt-wrap::-webkit-scrollbar { width: 6px; }
+        .modal-receipt-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
       `}</style>
     </>
   )

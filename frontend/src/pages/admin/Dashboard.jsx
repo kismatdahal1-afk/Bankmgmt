@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import StatsCard from '../../components/dashboard/StatsCard'
 import ChartCard from '../../components/dashboard/ChartCard'
 import StatusBadge from '../../components/common/StatusBadge'
@@ -9,7 +9,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    fetch('/api/dashboard', { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))

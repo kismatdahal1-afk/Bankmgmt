@@ -1078,6 +1078,63 @@ def api_filter_transactions():
     transactions = query.order_by(Transaction.created_at.desc()).all()
     return jsonify({'transactions': [_serialize_transaction(t) for t in transactions], 'total': len(transactions)})
 
+@api_bp.route('/transactions/<int:txn_id>/receipt', methods=['GET'])
+@staff_or_admin_required
+def api_transaction_receipt_admin(txn_id):
+    try:
+        txn = Transaction.query.get(txn_id)
+        if not txn:
+            return jsonify({'error': 'Transaction not found'}), 404
+        if txn.type in ('transfer_out', 'transfer_in') and txn.reference_number:
+            ref = txn.reference_number
+            tx_out = Transaction.query.filter_by(reference_number=ref, type='transfer_out').first()
+            tx_in = Transaction.query.filter_by(reference_number=ref, type='transfer_in').first()
+            primary = tx_out or tx_in or txn
+            from_account = Account.query.get(tx_out.account_id) if tx_out else None
+            to_account = Account.query.get(tx_in.account_id) if tx_in else None
+            from_customer = Customer.query.get(from_account.customer_id) if from_account else None
+            to_customer = Customer.query.get(to_account.customer_id) if to_account else None
+            now = primary.created_at
+            receipt = {
+                'reference': ref,
+                'transaction_type': 'Fund Transfer',
+                'status': primary.status or 'successful',
+                'date': now.strftime('%Y-%m-%d') if now else '',
+                'time': now.strftime('%I:%M %p') if now else '',
+                'from_account': from_account.account_number if from_account else '',
+                'from_account_type': from_account.account_type if from_account else '',
+                'from_customer': from_customer.full_name if from_customer else '',
+                'to_account': to_account.account_number if to_account else '',
+                'to_account_type': to_account.account_type if to_account else '',
+                'to_customer': to_customer.full_name if to_customer else '',
+                'amount': float(primary.amount),
+                'remaining_balance': float(tx_out.balance_after) if tx_out else float(tx_in.balance_after if tx_in else 0),
+                'description': primary.description or ''
+            }
+            return jsonify({'receipt': receipt})
+        acc = txn.account
+        cust = acc.customer if acc else None
+        now = txn.created_at
+        receipt = {
+            'reference': txn.reference_number or txn.transaction_uuid,
+            'transaction_type': txn.type.replace('_', ' ').title(),
+            'status': txn.status or 'successful',
+            'date': now.strftime('%Y-%m-%d') if now else '',
+            'time': now.strftime('%I:%M %p') if now else '',
+            'from_account': acc.account_number if acc else '',
+            'from_account_type': acc.account_type if acc else '',
+            'from_customer': cust.full_name if cust else '',
+            'to_account': '',
+            'to_account_type': '',
+            'to_customer': '',
+            'amount': float(txn.amount),
+            'remaining_balance': float(txn.balance_after),
+            'description': txn.description or ''
+        }
+        return jsonify({'receipt': receipt})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ===== LOAN ENDPOINTS =====
 
 @api_bp.route('/loans/', methods=['GET'])
@@ -1816,6 +1873,7 @@ def api_customer_transfer():
             notify_customer(to_cust.id, 'Transfer Received',
                 f'NPR {float(amount):,.2f} received from {from_cust_name} ({from_account.account_number}). Ref: {ref}')
         db.session.commit()
+        now_utc = _utcnow()
         return jsonify({'message': 'Transfer successful', 'reference': ref,
             'transaction': {
                 'reference': ref,
@@ -1826,7 +1884,12 @@ def api_customer_transfer():
                 'to_balance_after': float(to_balance),
                 'from_customer': from_cust_name,
                 'to_customer': to_cust_name,
-                'timestamp': _utcnow().isoformat()
+                'description': description,
+                'timestamp': now_utc.isoformat(),
+                'date': now_utc.strftime('%Y-%m-%d'),
+                'time': now_utc.strftime('%I:%M %p'),
+                'from_account_type': from_account.account_type,
+                'to_account_type': to_account.account_type
             }})
     except Exception as e:
         db.session.rollback()
@@ -1854,6 +1917,84 @@ def api_customer_transactions():
         q = q.filter(Transaction.created_at <= datetime.datetime.strptime(date_to + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
     transactions = q.order_by(Transaction.created_at.desc()).limit(200).all()
     return jsonify({'transactions': [_serialize_transaction(t) for t in transactions]})
+
+@api_bp.route('/customer/transaction-receipt/<reference>', methods=['GET'])
+@customer_login_required_api
+def api_customer_transaction_receipt(reference):
+    try:
+        customer = g.current_customer
+        account_ids = [acc.id for acc in Account.query.filter_by(customer_id=customer.id).all()]
+        txns = Transaction.query.filter(
+            Transaction.reference_number == reference,
+            Transaction.account_id.in_(account_ids)
+        ).order_by(Transaction.type).all()
+        if not txns:
+            return jsonify({'error': 'Transaction not found'}), 404
+        tx_out = next((t for t in txns if t.type == 'transfer_out'), None)
+        tx_in = next((t for t in txns if t.type == 'transfer_in'), None)
+        if tx_out and not tx_in:
+            tx_in = Transaction.query.filter_by(reference_number=reference, type='transfer_in').first()
+        if tx_in and not tx_out:
+            tx_out = Transaction.query.filter_by(reference_number=reference, type='transfer_out').first()
+        primary = tx_out or tx_in or txns[0]
+        from_account = Account.query.get(tx_out.account_id) if tx_out else None
+        to_account = Account.query.get(tx_in.account_id) if tx_in else None
+        from_customer = Customer.query.get(from_account.customer_id) if from_account else None
+        to_customer = Customer.query.get(to_account.customer_id) if to_account else None
+        now = primary.created_at
+        receipt = {
+            'reference': reference,
+            'transaction_type': 'Fund Transfer',
+            'status': primary.status or 'successful',
+            'date': now.strftime('%Y-%m-%d') if now else '',
+            'time': now.strftime('%I:%M %p') if now else '',
+            'from_account': from_account.account_number if from_account else '',
+            'from_account_type': from_account.account_type if from_account else '',
+            'from_customer': from_customer.full_name if from_customer else '',
+            'to_account': to_account.account_number if to_account else '',
+            'to_account_type': to_account.account_type if to_account else '',
+            'to_customer': to_customer.full_name if to_customer else '',
+            'amount': float(primary.amount),
+            'remaining_balance': float(tx_out.balance_after) if tx_out else float(tx_in.balance_after if tx_in else 0),
+            'description': primary.description or ''
+        }
+        return jsonify({'receipt': receipt})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/customer/transactions/<int:txn_id>/receipt', methods=['GET'])
+@customer_login_required_api
+def api_customer_transaction_receipt_by_id(txn_id):
+    try:
+        customer = g.current_customer
+        account_ids = [acc.id for acc in Account.query.filter_by(customer_id=customer.id).all()]
+        txn = Transaction.query.filter_by(id=txn_id).filter(Transaction.account_id.in_(account_ids)).first()
+        if not txn:
+            return jsonify({'error': 'Transaction not found'}), 404
+        if txn.type in ('transfer_out', 'transfer_in') and txn.reference_number:
+            return api_customer_transaction_receipt(txn.reference_number)
+        acc = txn.account
+        cust = acc.customer if acc else None
+        now = txn.created_at
+        receipt = {
+            'reference': txn.reference_number or txn.transaction_uuid,
+            'transaction_type': txn.type.replace('_', ' ').title(),
+            'status': txn.status or 'successful',
+            'date': now.strftime('%Y-%m-%d') if now else '',
+            'time': now.strftime('%I:%M %p') if now else '',
+            'from_account': acc.account_number if acc else '',
+            'from_account_type': acc.account_type if acc else '',
+            'from_customer': cust.full_name if cust else '',
+            'to_account': '',
+            'to_account_type': '',
+            'to_customer': '',
+            'amount': float(txn.amount),
+            'remaining_balance': float(txn.balance_after),
+            'description': txn.description or ''
+        }
+        return jsonify({'receipt': receipt})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/customer/profile', methods=['GET'])
 @customer_login_required_api

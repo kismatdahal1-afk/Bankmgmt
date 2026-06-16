@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/helpers'
 import StatusBadge from '../common/StatusBadge'
+import ReceiptView from '../common/ReceiptView'
 
 /* ---- Icon action config ---- */
 const ACTION_ICONS = {
@@ -39,6 +40,32 @@ export default function AccountDetailContent({ role }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
+
+  /* ---- receipt modal ---- */
+  const [receiptTxn, setReceiptTxn] = useState(null)
+  const [receiptData, setReceiptData] = useState(null)
+  const [receiptLoading, setReceiptLoading] = useState(false)
+
+  const fetchReceipt = (txn) => {
+    setReceiptTxn(txn)
+    setReceiptData(null)
+    setReceiptLoading(true)
+    fetch(`/api/transactions/${txn.id}/receipt`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.receipt) setReceiptData(d.receipt); setReceiptLoading(false) })
+      .catch(() => setReceiptLoading(false))
+  }
+
+  const closeReceipt = () => { setReceiptTxn(null); setReceiptData(null) }
+
+  useEffect(() => {
+    if (receiptTxn) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [receiptTxn])
 
   /* ---- password reset modal ---- */
   const [showResetPwd, setShowResetPwd] = useState(false)
@@ -342,7 +369,7 @@ export default function AccountDetailContent({ role }) {
               </thead>
               <tbody>
                 {(transactions || []).slice(0, 5).map(t => (
-                  <tr key={t.id}>
+                  <tr key={t.id} onClick={() => fetchReceipt(t)} style={{ cursor: 'pointer' }}>
                     <td style={{ fontSize: '0.8rem' }}>{formatDateTime(t.created_at)}</td>
                     <td><StatusBadge status={t.type} /></td>
                     <td style={{ fontWeight: 600, color: t.type === 'deposit' ? '#4caf50' : '#f44336' }}>{formatCurrency(t.amount)}</td>
@@ -510,7 +537,7 @@ export default function AccountDetailContent({ role }) {
               </thead>
               <tbody>
                 {transactions.map(t => (
-                  <tr key={t.id}>
+                  <tr key={t.id} onClick={() => fetchReceipt(t)} style={{ cursor: 'pointer' }}>
                     <td style={{ fontSize: '0.8rem' }}>{formatDateTime(t.created_at)}</td>
                     <td style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{t.reference_number || '—'}</td>
                     <td><StatusBadge status={t.type} /></td>
@@ -754,6 +781,40 @@ export default function AccountDetailContent({ role }) {
           </div>
         </div>
       )}
+
+      {receiptTxn && (
+        <div className="modal-overlay" onClick={closeReceipt}>
+          <div className="modal-receipt-wrap" onClick={e => e.stopPropagation()}>
+            {receiptLoading ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
+              </div>
+            ) : receiptData ? (
+              <ReceiptView receipt={receiptData} showActions onClose={closeReceipt} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <style>{`
+        .modal-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000; padding: 20px;
+        }
+        .modal-receipt-wrap {
+          width: 100%; max-width: 680px;
+          max-height: 85vh; overflow-y: auto;
+        }
+        .modal-receipt-wrap::-webkit-scrollbar { width: 6px; }
+        .modal-receipt-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+      `}</style>
     </>
   )
 }
