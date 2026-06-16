@@ -11,7 +11,7 @@ export default function StaffTransactionForm() {
   const selectedAccountNum = searchParams.get('account_number')
 
   useEffect(() => {
-    fetch('/api/accounts/')
+    fetch('/api/accounts/', { credentials: 'include' })
       .then(r => r.json())
       .then(d => setAccounts(d.accounts || d))
       .catch(err => console.error('Fetch error:', err))

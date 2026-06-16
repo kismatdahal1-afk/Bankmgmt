@@ -785,19 +785,22 @@ export default function AccountDetailContent({ role }) {
       {receiptTxn && (
         <div className="modal-overlay" onClick={closeReceipt}>
           <div className="modal-receipt-wrap" onClick={e => e.stopPropagation()}>
-            {receiptLoading ? (
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
-                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
-              </div>
-            ) : receiptData ? (
-              <ReceiptView receipt={receiptData} showActions onClose={closeReceipt} />
-            ) : (
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
-                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+              <button className="receipt-close-btn" onClick={closeReceipt}>Close</button>
+              {receiptLoading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', width: '100%' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
+                </div>
+              ) : receiptData ? (
+                <ReceiptView receipt={receiptData} showActions />
+              ) : (
+                <div style={{ textAlign: 'center', padding: '60px 0', width: '100%' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -812,6 +815,15 @@ export default function AccountDetailContent({ role }) {
           width: 100%; max-width: 680px;
           max-height: 85vh; overflow-y: auto;
         }
+        .receipt-close-btn {
+          background: rgba(239,68,68,0.12); color: var(--danger);
+          border: 1px solid rgba(239,68,68,0.3);
+          padding: 4px 14px; border-radius: 999px;
+          font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+          cursor: pointer; transition: all 0.2s;
+          text-transform: uppercase;
+        }
+        .receipt-close-btn:hover { background: rgba(239,68,68,0.2); }
         .modal-receipt-wrap::-webkit-scrollbar { width: 6px; }
         .modal-receipt-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
       `}</style>

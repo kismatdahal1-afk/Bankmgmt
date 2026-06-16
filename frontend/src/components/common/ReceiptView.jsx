@@ -89,7 +89,7 @@ function renderReceiptSections(r) {
   `
 }
 
-export default function ReceiptView({ receipt, showActions = false, onViewReceipt, onDownloadPDF, variant = 'default', onClose }) {
+export default function ReceiptView({ receipt, showActions = false, onViewReceipt, onDownloadPDF, variant = 'default' }) {
   if (!receipt) return null
 
   const handleViewReceipt = () => {
@@ -110,18 +110,14 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
     <div className="receipt-view">
       <div className="receipt-card">
         <div className="receipt-header-section">
-          <div className="receipt-bank">
-            <span className="material-symbols-rounded" style={{ color: 'var(--accent-color)', fontSize: '1.5rem' }}>account_balance</span>
-            <span className="receipt-bank-name">Village Bank</span>
+          <div className="receipt-brand">
+            <span className="material-symbols-rounded" style={{ fontSize: '1.8rem', color: 'var(--accent-color)' }}>account_balance</span>
+            <span className="receipt-brand-name">Village Bank</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {!showSuccess && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.3px' }}>Transaction Receipt</span>
-            )}
-            {onClose && (
-              <button className="receipt-close-btn" onClick={onClose}>Close</button>
-            )}
-          </div>
+          <div className="receipt-brand-sub">Bank Management System</div>
+          {!showSuccess && (
+            <div className="receipt-brand-title">Transaction Receipt</div>
+          )}
         </div>
 
         {showSuccess && (
@@ -268,22 +264,34 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
         .receipt-header-section {
           background: linear-gradient(135deg, #0a1628, #111827);
           border-bottom: 1px solid var(--border-color);
-          padding: 16px 24px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+          padding: 24px 24px 18px;
+          text-align: center;
         }
-        .receipt-bank {
+        .receipt-brand {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 10px;
         }
-        .receipt-bank-name {
-          font-size: 1.05rem;
-          font-weight: 700;
+        .receipt-brand-name {
+          font-size: 1.3rem;
+          font-weight: 800;
           background: linear-gradient(135deg, #3b82f6, #8b5cf6);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
+        }
+        .receipt-brand-sub {
+          font-size: 0.78rem;
+          color: var(--text-secondary);
+          margin-top: 2px;
+        }
+        .receipt-brand-title {
+          font-size: 0.72rem;
+          color: var(--text-muted);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-top: 6px;
         }
         .receipt-success-section {
           text-align: center;
@@ -414,17 +422,6 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
           gap: 12px;
           justify-content: center;
           flex-wrap: wrap;
-        }
-        .receipt-close-btn {
-          background: rgba(239,68,68,0.12); color: var(--danger);
-          border: 1px solid rgba(239,68,68,0.3);
-          padding: 4px 12px; border-radius: 999px;
-          font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
-          cursor: pointer; transition: all 0.2s;
-          text-transform: uppercase; line-height: 1.4;
-        }
-        .receipt-close-btn:hover {
-          background: rgba(239,68,68,0.2);
         }
         @media (max-width: 600px) {
           .receipt-body { padding: 14px 16px 0; }

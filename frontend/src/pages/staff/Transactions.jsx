@@ -70,7 +70,7 @@ export default function StaffTransactions() {
   const exportCSV = () => {
     const headers = ['Txn ID', 'Date', 'Customer', 'Account', 'Type', 'Amount', 'Balance After', 'Description', 'Status', 'Reference']
     const rows = transactions.map(t => [
-      t.transaction_uuid, t.created_at, t.account?.customer?.full_name || '',
+      t.reference_number || t.transaction_uuid, t.created_at, t.account?.customer?.full_name || '',
       t.account?.account_number || '', t.type, t.amount, t.balance_after,
       (t.description || '').replace(/,/g, ';'), t.status || 'successful', t.reference_number || ''
     ])
@@ -149,7 +149,7 @@ export default function StaffTransactions() {
           <tbody>
             {transactions.length > 0 ? transactions.map(txn => (
               <tr key={txn.id} onClick={() => fetchReceipt(txn)} style={{ cursor: 'pointer' }}>
-                <td><code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{txn.transaction_uuid}</code></td>
+                <td><code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{txn.reference_number || txn.transaction_uuid}</code></td>
                 <td style={{ fontSize: '0.85rem' }}>{formatDateTime(txn.created_at)}</td>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -178,19 +178,22 @@ export default function StaffTransactions() {
       {receiptTxn && (
         <div className="modal-overlay" onClick={closeReceipt}>
           <div className="modal-receipt-wrap" onClick={e => e.stopPropagation()}>
-            {receiptLoading ? (
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
-                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
-              </div>
-            ) : receiptData ? (
-              <ReceiptView receipt={receiptData} showActions onClose={closeReceipt} />
-            ) : (
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
-                <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+              <button className="receipt-close-btn" onClick={closeReceipt}>Close</button>
+              {receiptLoading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', width: '100%' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>sync</span>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading receipt...</div>
+                </div>
+              ) : receiptData ? (
+                <ReceiptView receipt={receiptData} showActions />
+              ) : (
+                <div style={{ textAlign: 'center', padding: '60px 0', width: '100%' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: '2.5rem', color: 'var(--text-muted)' }}>receipt_long</span>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -205,6 +208,15 @@ export default function StaffTransactions() {
           width: 100%; max-width: 680px;
           max-height: 85vh; overflow-y: auto;
         }
+        .receipt-close-btn {
+          background: rgba(239,68,68,0.12); color: var(--danger);
+          border: 1px solid rgba(239,68,68,0.3);
+          padding: 4px 14px; border-radius: 999px;
+          font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+          cursor: pointer; transition: all 0.2s;
+          text-transform: uppercase;
+        }
+        .receipt-close-btn:hover { background: rgba(239,68,68,0.2); }
         .modal-receipt-wrap::-webkit-scrollbar { width: 6px; }
         .modal-receipt-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
       `}</style>

@@ -107,7 +107,7 @@ export default function StaffReports() {
               </div>
               <table className="custom-table"><thead><tr><th>Txn ID</th><th>Time</th><th>Member / Acc</th><th>Type</th><th>Amount</th><th>Memo</th></tr></thead>
                 <tbody>{data.daily_transactions.map(txn => (
-                  <tr key={txn.id}><td><code style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{txn.transaction_uuid}</code></td>
+                  <tr key={txn.id}><td><code style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{txn.reference_number || txn.transaction_uuid}</code></td>
                     <td>{new Date(txn.created_at).toLocaleTimeString()}</td>
                     <td>{txn.account?.customer?.full_name} (Acc: {txn.account?.account_number})</td>
                     <td><StatusBadge status={txn.type} /></td>

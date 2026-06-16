@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import StatsCard from '../../components/dashboard/StatsCard'
 import ChartCard from '../../components/dashboard/ChartCard'
 import StatusBadge from '../../components/common/StatusBadge'
@@ -8,12 +8,20 @@ export default function AdminDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
     fetch('/api/dashboard', { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetchDashboard()
+    const id = setInterval(fetchDashboard, 30000)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchDashboard() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
+  }, [fetchDashboard])
 
   if (loading) return <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>
 
@@ -49,6 +57,7 @@ export default function AdminDashboard() {
           labels={data?.date_labels || []}
           deposits={data?.daily_deposits || []}
           withdrawals={data?.daily_withdrawals || []}
+          transfers={data?.daily_transfers || []}
         />
 
         <div className="table-container" style={{ flex: '1.5', minWidth: '380px' }}>

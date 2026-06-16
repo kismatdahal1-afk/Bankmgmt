@@ -138,6 +138,7 @@ def _serialize_loan_compact(l):
     }
 
 def _serialize_account(a):
+    cust = a.customer
     return {
         'id': a.id,
         'customer_id': a.customer_id,
@@ -149,7 +150,8 @@ def _serialize_account(a):
         'total_deposits': float(a.total_deposits),
         'total_withdrawals': float(a.total_withdrawals),
         'created_at': a.created_at.isoformat() if a.created_at else None,
-        'customer': _simple_customer(a.customer) if a.customer else None
+        'customer': _simple_customer(cust) if cust else None,
+        'customer_name': cust.full_name if cust else None
     }
 
 def _simple_customer(c):
@@ -166,11 +168,14 @@ def _simple_account(a):
         'account_number': a.account_number,
         'account_type': a.account_type,
         'balance': float(a.balance),
-        'status': a.status
+        'status': a.status,
+        'customer_name': a.customer.full_name if a.customer else None
     }
 
 def _serialize_transaction(t):
     acc = t.account
+    if acc is None and t.account_id is not None:
+        acc = db.session.get(Account, t.account_id)
     cust = acc.customer if acc else None
     return {
         'id': t.id,
@@ -1318,7 +1323,9 @@ def api_dashboard():
     total_turnover = total_deposits_volume + total_withdrawals_volume
     total_transactions = Transaction.query.count()
     today_txns = Transaction.query.filter(db.func.date(Transaction.created_at) == _utcnow().date()).count()
-    recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
+    recent_transactions = Transaction.query.options(
+        joinedload(Transaction.account).joinedload(Account.customer)
+    ).order_by(Transaction.created_at.desc()).limit(5).all()
     recent_loans = Loan.query.order_by(Loan.applied_date.desc()).limit(5).all()
     pending_loans = Loan.query.filter_by(status='pending').order_by(Loan.applied_date.desc()).limit(5).all()
     today = _utcnow().date()
@@ -1326,6 +1333,7 @@ def api_dashboard():
     date_labels = [d.strftime('%b %d') for d in dates]
     daily_deposits = []
     daily_withdrawals = []
+    daily_transfers = []
     for d in dates:
         start = datetime.datetime.combine(d, datetime.time.min)
         end = datetime.datetime.combine(d, datetime.time.max)
@@ -1335,8 +1343,12 @@ def api_dashboard():
         wit = db.session.query(db.func.sum(Transaction.amount)).filter(
             Transaction.type == 'withdrawal', Transaction.created_at >= start, Transaction.created_at <= end
         ).scalar() or Decimal('0.00')
+        trf = db.session.query(db.func.sum(Transaction.amount)).filter(
+            Transaction.type == 'transfer_out', Transaction.created_at >= start, Transaction.created_at <= end
+        ).scalar() or Decimal('0.00')
         daily_deposits.append(float(dep))
         daily_withdrawals.append(float(wit))
+        daily_transfers.append(float(trf))
     return jsonify({
         'total_customers': total_customers,
         'total_accounts': total_accounts,
@@ -1358,7 +1370,8 @@ def api_dashboard():
         'pending_loans': [_serialize_loan(l) for l in pending_loans],
         'date_labels': date_labels,
         'daily_deposits': daily_deposits,
-        'daily_withdrawals': daily_withdrawals
+        'daily_withdrawals': daily_withdrawals,
+        'daily_transfers': daily_transfers
     })
 
 @api_bp.route('/reports', methods=['GET'])

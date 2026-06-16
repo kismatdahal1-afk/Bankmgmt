@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import StatsCard from '../../components/dashboard/StatsCard'
 import ChartCard from '../../components/dashboard/ChartCard'
 import StatusBadge from '../../components/common/StatusBadge'
@@ -8,12 +8,20 @@ export default function StaffDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
     fetch('/api/dashboard', { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetchDashboard()
+    const id = setInterval(fetchDashboard, 30000)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchDashboard() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
+  }, [fetchDashboard])
 
   if (loading) return <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>
 
@@ -34,10 +42,10 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid-stats" style={{ marginTop: '10px' }}>
-        <StatsCard title="Total Accounts" value={data?.total_accounts || 0} subtitle="across all members" />
-        <StatsCard title="Total Loans" value={data?.total_loans_count || 0} subtitle={`${data?.pending_loans_count || 0} pending`} variant="warning" />
-        <StatsCard title="Today's Txns" value={data?.today_transactions || 0} subtitle="processed today" variant="info" />
-        <StatsCard title="Loan Disbursed" value={formatCurrency(data?.total_loan_disbursed || 0)} subtitle="total disbursed" />
+        <StatsCard title="Total Accounts" value={data?.total_accounts || 0} subtitle={`${data?.frozen_accounts || 0} frozen`} />
+        <StatsCard title="Total Loans" value={data?.total_loans_count || 0} subtitle={`${data?.pending_loans_count || 0} pending approval`} variant="warning" />
+        <StatsCard title="Loan Disbursed" value={formatCurrency(data?.total_loan_disbursed || 0)} subtitle={`NPR ${(data?.total_loan_collected || 0).toLocaleString()} collected`} />
+        <StatsCard title="Today's Transactions" value={data?.today_transactions || 0} subtitle="processed today" variant="info" />
       </div>
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginTop: '10px' }}>
@@ -45,6 +53,7 @@ export default function StaffDashboard() {
           labels={data?.date_labels || []}
           deposits={data?.daily_deposits || []}
           withdrawals={data?.daily_withdrawals || []}
+          transfers={data?.daily_transfers || []}
         />
 
         <div className="table-container" style={{ flex: '1.5', minWidth: '380px' }}>

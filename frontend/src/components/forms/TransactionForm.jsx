@@ -8,7 +8,7 @@ export default function TransactionForm({ action, accounts, selectedAccountNum, 
           <div className="form-group">
             <label htmlFor="account_number">Select Target Account</label>
             <select id="account_number" name="account_number" className="form-control" required
-            defaultValue={selectedAccountNum || ''}>
+            key={accounts.length} defaultValue={selectedAccountNum || ''}>
               <option value="" disabled>-- Choose Account --</option>
               {accounts?.map((acc) => (
                 <option key={acc.account_number} value={acc.account_number}>
