@@ -177,20 +177,66 @@ def _serialize_transaction(t):
     if acc is None and t.account_id is not None:
         acc = db.session.get(Account, t.account_id)
     cust = acc.customer if acc else None
+
+    # balance before transaction
+    amt = float(t.amount)
+    bal_after = float(t.balance_after)
+    if t.type in ('deposit', 'transfer_in'):
+        bal_before = bal_after - amt
+    else:
+        bal_before = bal_after + amt
+
+    # initiated by
+    initiated_by_type = 'system'
+    initiated_by_name = None
+    if t.created_by is not None:
+        user = db.session.get(User, t.created_by)
+        if user:
+            initiated_by_type = user.role
+            initiated_by_name = user.username
+        else:
+            cust_by = db.session.get(Customer, t.created_by)
+            if cust_by:
+                initiated_by_type = 'customer'
+                initiated_by_name = cust_by.full_name
+
+    # counterparty (for transfers)
+    counterparty_name = None
+    counterparty_account = None
+    if t.type in ('transfer_out', 'transfer_in') and t.reference_number:
+        ref = t.reference_number
+        if t.type == 'transfer_out':
+            partner = Transaction.query.filter_by(reference_number=ref, type='transfer_in').first()
+        else:
+            partner = Transaction.query.filter_by(reference_number=ref, type='transfer_out').first()
+        if partner:
+            p_acc = partner.account
+            if p_acc is None and partner.account_id is not None:
+                p_acc = db.session.get(Account, partner.account_id)
+            if p_acc:
+                counterparty_account = p_acc.account_number
+                p_cust = p_acc.customer
+                counterparty_name = p_cust.full_name if p_cust else None
+
     return {
         'id': t.id,
         'transaction_uuid': t.transaction_uuid,
         'account_id': t.account_id,
         'type': t.type,
-        'amount': float(t.amount),
-        'balance_after': float(t.balance_after),
+        'amount': amt,
+        'balance_before': bal_before,
+        'balance_after': bal_after,
         'description': t.description,
         'status': t.status,
         'reference_number': t.reference_number,
         'created_at': t.created_at.isoformat() if t.created_at else None,
         'account_number': acc.account_number if acc else None,
         'customer_name': cust.full_name if cust else None,
-        'account': _serialize_account(acc) if acc else None
+        'account': _serialize_account(acc) if acc else None,
+        'initiated_by_type': initiated_by_type,
+        'initiated_by_name': initiated_by_name,
+        'counterparty_name': counterparty_name,
+        'counterparty_account': counterparty_account
     }
 
 def _compute_loan_overdue(l):

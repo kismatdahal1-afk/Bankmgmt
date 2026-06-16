@@ -68,16 +68,16 @@ function renderReceiptSections(r) {
       <div class="row"><span class="label">Account Holder</span><span class="value">${r.from_customer || '—'}</span></div>
       <div class="row"><span class="label">Account Number</span><span class="value mono">${r.from_account || '—'}</span></div>
     </div>
-    ${r.to_account ? `
+    ${r.transaction_type && r.transaction_type.includes('Transfer') ? `
     <div class="section">
       <div class="section-title">Receiver Information</div>
       <div class="row"><span class="label">Account Holder</span><span class="value">${r.to_customer || '—'}</span></div>
-      <div class="row"><span class="label">Account Number</span><span class="value mono">${r.to_account}</span></div>
+      <div class="row"><span class="label">Account Number</span><span class="value mono">${r.to_account || '—'}</span></div>
     </div>
     ` : ''}
     <div class="section">
       <div class="section-title">Transfer Details</div>
-      <div class="row"><span class="label">${r.to_account ? 'Transfer Amount' : 'Amount'}</span><span class="value amount">${formatCurrency(r.amount)}</span></div>
+      <div class="row"><span class="label">${r.transaction_type && r.transaction_type.includes('Transfer') ? 'Transfer Amount' : 'Amount'}</span><span class="value amount">${formatCurrency(r.amount)}</span></div>
       <div class="row"><span class="label">Remaining Balance</span><span class="value">${formatCurrency(r.remaining_balance)}</span></div>
     </div>
     ${r.description ? `
@@ -184,7 +184,7 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
             </div>
           </div>
 
-          {receipt.to_account ? (
+          {receipt.transaction_type && receipt.transaction_type.includes('Transfer') ? (
             <div className="receipt-section">
               <div className="receipt-section-title">Receiver Information</div>
               <div className="receipt-row">
@@ -193,7 +193,7 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
               </div>
               <div className="receipt-row">
                 <span className="receipt-label">Account Number</span>
-                <span className="receipt-value mono">{receipt.to_account}</span>
+                <span className="receipt-value mono">{receipt.to_account || '—'}</span>
               </div>
             </div>
           ) : null}
@@ -201,7 +201,7 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
           <div className="receipt-section">
             <div className="receipt-section-title">Transfer Details</div>
             <div className="receipt-row">
-              <span className="receipt-label">{receipt.to_account ? 'Transfer Amount' : 'Amount'}</span>
+              <span className="receipt-label">{receipt.transaction_type && receipt.transaction_type.includes('Transfer') ? 'Transfer Amount' : 'Amount'}</span>
               <span className="receipt-value receipt-amount">{formatCurrency(receipt.amount)}</span>
             </div>
             <div className="receipt-row">
