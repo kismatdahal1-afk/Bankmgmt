@@ -92,7 +92,7 @@ export default function AdminAccounts() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
         <div className="card-stat" style={{ borderLeft: '4px solid var(--accent-color)', background: 'linear-gradient(135deg, var(--bg-secondary) 0%, rgba(99,102,241,0.05) 100%)' }}>
           <span className="stat-title" style={{ fontSize: '0.8rem' }}>Total Bank Balance</span>
-          <span className="stat-value" style={{ fontSize: '2.2rem', color: 'var(--accent-color)' }}>{formatCurrency(totalBalance)}</span>
+          <span className="stat-value" style={{ fontSize: '2.2rem', fontWeight: 800 }}>{(() => { const p = formatCurrency(totalBalance).split(' '); return <><span style={{ color: '#3b82f6' }}>{p[0]}</span> <span style={{ color: '#ffd54f' }}>{p[1]}</span></> })()}</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-4px' }}>Across all accounts</span>
         </div>
         <div className="card-stat"><span className="stat-title">Total Accounts</span><span className="stat-value">{totalAccounts}</span></div>

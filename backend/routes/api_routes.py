@@ -835,13 +835,13 @@ def api_unfreeze_account(account_id):
 def api_close_account(account_id):
     account = Account.query.get_or_404(account_id)
     if account.balance > 0:
-        return jsonify({'error': 'Account has remaining balance. Withdraw funds first.'}), 400
+        return jsonify({'error': 'Account must have a zero balance before it can be closed.'}), 400
     account.status = 'closed'
     log_audit('account_closed', 'account', account_id, f'Account {account.account_number} closed')
     notify_customer(account.customer_id, 'Account Closed',
         f'Your account ({account.account_number}) has been closed.')
     db.session.commit()
-    return jsonify({'message': 'Account closed', 'account': _serialize_account(account)})
+    return jsonify({'message': 'Account closed successfully.', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/suspend/<int:account_id>', methods=['POST'])
 @staff_or_admin_required
@@ -873,12 +873,14 @@ def api_unsuspend_account(account_id):
 @admin_required
 def api_archive_account(account_id):
     account = Account.query.get_or_404(account_id)
+    if account.balance > 0:
+        return jsonify({'error': 'Account must have a zero balance before it can be archived.'}), 400
     account.status = 'archived'
     log_audit('account_archived', 'account', account_id, f'Account {account.account_number} archived')
     notify_customer(account.customer_id, 'Account Archived',
         f'Your account ({account.account_number}) has been archived.')
     db.session.commit()
-    return jsonify({'message': 'Account archived', 'account': _serialize_account(account)})
+    return jsonify({'message': 'Account archived successfully.', 'account': _serialize_account(account)})
 
 @api_bp.route('/accounts/unarchive/<int:account_id>', methods=['POST'])
 @admin_required
@@ -892,6 +894,19 @@ def api_unarchive_account(account_id):
         f'Your account ({account.account_number}) has been unarchived.')
     db.session.commit()
     return jsonify({'message': 'Account unarchived', 'account': _serialize_account(account)})
+
+@api_bp.route('/accounts/reopen/<int:account_id>', methods=['POST'])
+@admin_required
+def api_reopen_account(account_id):
+    account = Account.query.get_or_404(account_id)
+    if account.status != 'closed':
+        return jsonify({'error': 'Account is not closed'}), 400
+    account.status = 'active'
+    log_audit('account_reopened', 'account', account_id, f'Account {account.account_number} reopened')
+    notify_customer(account.customer_id, 'Account Reopened',
+        f'Your account ({account.account_number}) has been reopened.')
+    db.session.commit()
+    return jsonify({'message': 'Account reopened successfully.', 'account': _serialize_account(account)})
 
 @api_bp.route('/customers/forgot-password/verify', methods=['POST'])
 @staff_or_admin_required

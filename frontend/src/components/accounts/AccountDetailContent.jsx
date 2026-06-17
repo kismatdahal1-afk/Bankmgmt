@@ -14,23 +14,31 @@ const ACTION_ICONS = {
 
 /* Toggle-based status action helpers */
 function suspendAction(acc) {
-  if (acc.status === 'active')  return { icon: 'block',       label: 'Suspend',   color: '#ff9800',  url: `/api/accounts/suspend/${acc.id}`,   confirmMsg: 'Suspend this account?' }
-  if (acc.status === 'suspended') return { icon: 'check_circle', label: 'Unsuspend', color: '#4caf50', url: `/api/accounts/unsuspend/${acc.id}`, confirmMsg: 'Unsuspend this account?' }
+  if (acc.status === 'active')  return { type:'suspend', icon:'block', label:'Suspend', color:'#ff9800', url:`/api/accounts/suspend/${acc.id}`,
+    modalTitle:'Suspend Account', modalMessage:'Are you sure you want to suspend this account?', confirmText:'Suspend', successMsg:'Account suspended successfully.' }
+  if (acc.status === 'suspended') return { type:'unsuspend', icon:'check_circle', label:'Unsuspend', color:'#4caf50', url:`/api/accounts/unsuspend/${acc.id}`,
+    modalTitle:'Unsuspend Account', modalMessage:'Are you sure you want to unsuspend this account?', confirmText:'Unsuspend', successMsg:'Account unsuspended successfully.' }
   return null
 }
 function freezeAction(acc) {
-  if (acc.status === 'active')  return { icon: 'ac_unit',      label: 'Freeze',    color: '#009688', url: `/api/accounts/freeze/${acc.id}`,   confirmMsg: 'Freeze this account?' }
-  if (acc.status === 'frozen')  return { icon: 'check_circle', label: 'Unfreeze',  color: '#4caf50',  url: `/api/accounts/unfreeze/${acc.id}`, confirmMsg: 'Unfreeze this account?' }
+  if (acc.status === 'active')  return { type:'freeze', icon:'ac_unit', label:'Freeze', color:'#009688', url:`/api/accounts/freeze/${acc.id}`,
+    modalTitle:'Freeze Account', modalMessage:'Are you sure you want to freeze this account?', confirmText:'Freeze', successMsg:'Account frozen successfully.' }
+  if (acc.status === 'frozen')  return { type:'unfreeze', icon:'check_circle', label:'Unfreeze', color:'#4caf50', url:`/api/accounts/unfreeze/${acc.id}`,
+    modalTitle:'Unfreeze Account', modalMessage:'Are you sure you want to unfreeze this account?', confirmText:'Unfreeze', successMsg:'Account unfrozen successfully.' }
   return null
 }
 function archiveAction(acc) {
-  if (acc.status !== 'archived' && acc.status !== 'closed') return { icon: 'archive',   label: 'Archive',       color: '#9e9e9e', url: `/api/accounts/archive/${acc.id}`,   confirmMsg: 'Archive this account?' }
-  if (acc.status === 'archived') return { icon: 'unarchive', label: 'Unarchive',     color: '#4caf50', url: `/api/accounts/unarchive/${acc.id}`, confirmMsg: 'Unarchive this account?' }
+  if (acc.status !== 'archived' && acc.status !== 'closed') return { type:'archive', icon:'archive', label:'Archive', color:'#9e9e9e', url:`/api/accounts/archive/${acc.id}`,
+    modalTitle:'Archive Account', modalMessage:'Are you sure you want to archive this account?', confirmText:'Archive', successMsg:'Account archived successfully.' }
+  if (acc.status === 'archived') return { type:'unarchive', icon:'unarchive', label:'Unarchive', color:'#4caf50', url:`/api/accounts/unarchive/${acc.id}`,
+    modalTitle:'Unarchive Account', modalMessage:'Are you sure you want to unarchive this account?', confirmText:'Unarchive', successMsg:'Account unarchived successfully.' }
   return null
 }
 function closeAction(acc) {
-  if (acc.status !== 'closed' && acc.status !== 'archived') return { icon: 'cancel', label: 'Close Account', color: '#f44336', url: `/api/accounts/close/${acc.id}`,   confirmMsg: 'Close this account? Balance must be zero.' }
-  if (acc.status === 'closed') return { icon: 'replay',     label: 'Reopen',        color: '#4caf50', url: `/api/accounts/reopen/${acc.id}`, confirmMsg: 'Reopen this account?' }
+  if (acc.status !== 'closed' && acc.status !== 'archived') return { type:'close', icon:'cancel', label:'Close Account', color:'#f44336', url:`/api/accounts/close/${acc.id}`,
+    modalTitle:'Close Account', modalMessage:'Are you sure you want to permanently close this account?', confirmText:'Close Account', successMsg:'Account closed successfully.' }
+  if (acc.status === 'closed') return { type:'reopen', icon:'replay', label:'Reopen', color:'#4caf50', url:`/api/accounts/reopen/${acc.id}`,
+    modalTitle:'Reopen Account', modalMessage:'Are you sure you want to reopen this account?', confirmText:'Reopen', successMsg:'Account reopened successfully.' }
   return null
 }
 
@@ -66,6 +74,49 @@ export default function AccountDetailContent({ role }) {
     }
     return () => { document.body.style.overflow = '' }
   }, [receiptTxn])
+
+  /* ---- loan action helper (preserved for loan system) ---- */
+  const doLoanAction = async (url, msg) => {
+    if (msg && !confirm(msg)) return
+    try {
+      const r = await fetch(url, { method: 'POST', credentials: 'include' })
+      const d = await r.json()
+      if (d.error) { alert(d.error); return }
+      fetchDetail()
+    } catch (e) { console.error(e) }
+  }
+
+  /* ---- confirmation modal & flash ---- */
+  const [confirmAction, setConfirmAction] = useState(null)
+  const [flash, setFlash] = useState(null)
+
+  const openConfirmModal = (action) => {
+    if ((action.type === 'archive' || action.type === 'close') && data?.account?.balance > 0) {
+      const label = action.type === 'archive' ? 'archived' : 'closed'
+      setFlash({ message: `Account must have a zero balance before it can be ${label}.`, type: 'error' })
+      return
+    }
+    setConfirmAction(action)
+  }
+
+  const handleConfirm = async () => {
+    const action = confirmAction
+    setConfirmAction(null)
+    try {
+      const r = await fetch(action.url, { method: 'POST', credentials: 'include' })
+      const d = await r.json()
+      if (d.error) { setFlash({ message: d.error, type: 'error' }); return }
+      setFlash({ message: action.successMsg, type: 'success' })
+      fetchDetail()
+    } catch (e) { setFlash({ message: 'An error occurred while processing the request.', type: 'error' }) }
+  }
+
+  useEffect(() => {
+    if (flash) {
+      const timer = setTimeout(() => setFlash(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [flash])
 
   /* ---- password reset modal ---- */
   const [showResetPwd, setShowResetPwd] = useState(false)
@@ -106,16 +157,6 @@ export default function AccountDetailContent({ role }) {
   }
 
   useEffect(() => { fetchDetail() }, [accountId])
-
-  const doAction = async (url, msg) => {
-    if (msg && !confirm(msg)) return
-    try {
-      const r = await fetch(url, { method: 'POST', credentials: 'include' })
-      const d = await r.json()
-      if (d.error) { alert(d.error); return }
-      fetchDetail()
-    } catch (e) { console.error(e) }
-  }
 
   /* ==== Reset Password Modal ==== */
   const openResetPwdModal = () => {
@@ -321,6 +362,20 @@ export default function AccountDetailContent({ role }) {
 
       {renderTabNav()}
 
+      {flash && (
+        <div style={{ marginBottom: '12px' }}>
+          <div className={`flash-message flash-${flash.type === 'error' ? 'danger' : flash.type}`}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '1.2rem' }}>
+                {flash.type === 'error' ? 'error' : 'check_circle'}
+              </span>
+              {flash.message}
+            </span>
+            <span className="material-symbols-rounded" style={{ cursor: 'pointer', fontSize: '1.2rem' }} onClick={() => setFlash(null)}>close</span>
+          </div>
+        </div>
+      )}
+
       {/* ================ OVERVIEW ================ */}
       {activeTab === 'overview' && (
         <div>
@@ -496,8 +551,8 @@ export default function AccountDetailContent({ role }) {
                         <Link to={`${prefix}/loans/repay/${l.id}`} className="btn btn-sm btn-success" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>Repay</Link>
                       ) : l.status === 'pending' && isAdmin ? (
                         <div style={{ display: 'flex', gap: '4px' }}>
-                          <button onClick={() => doAction(`/api/loans/approve/${l.id}`, `Approve loan ${l.loan_number}?`)} className="btn btn-sm btn-success" style={{ padding: '2px 8px', fontSize: '0.7rem', border: 'none', cursor: 'pointer' }}>Approve</button>
-                          <button onClick={() => doAction(`/api/loans/reject/${l.id}`, `Reject loan ${l.loan_number}?`)} className="btn btn-sm btn-danger" style={{ padding: '2px 8px', fontSize: '0.7rem', border: 'none', cursor: 'pointer' }}>Reject</button>
+                          <button onClick={() => doLoanAction(`/api/loans/approve/${l.id}`, `Approve loan ${l.loan_number}?`)} className="btn btn-sm btn-success" style={{ padding: '2px 8px', fontSize: '0.7rem', border: 'none', cursor: 'pointer' }}>Approve</button>
+                          <button onClick={() => doLoanAction(`/api/loans/reject/${l.id}`, `Reject loan ${l.loan_number}?`)} className="btn btn-sm btn-danger" style={{ padding: '2px 8px', fontSize: '0.7rem', border: 'none', cursor: 'pointer' }}>Reject</button>
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
@@ -566,13 +621,13 @@ export default function AccountDetailContent({ role }) {
             <div className="table-header-bar"><span className="table-title">Status Management</span></div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px', padding: '16px' }}>
               {/* Suspend ↔ Unsuspend */}
-              {(() => { const a = suspendAction(account); return a ? renderActionCard(a, () => doAction(a.url, a.confirmMsg)) : null })()}
+              {(() => { const a = suspendAction(account); return a ? renderActionCard(a, () => openConfirmModal(a)) : null })()}
               {/* Freeze ↔ Unfreeze */}
-              {(() => { const a = freezeAction(account); return a ? renderActionCard(a, () => doAction(a.url, a.confirmMsg)) : null })()}
+              {(() => { const a = freezeAction(account); return a ? renderActionCard(a, () => openConfirmModal(a)) : null })()}
               {/* Archive ↔ Unarchive (admin only) */}
-              {isAdmin && (() => { const a = archiveAction(account); return a ? renderActionCard(a, () => doAction(a.url, a.confirmMsg)) : null })()}
+              {isAdmin && (() => { const a = archiveAction(account); return a ? renderActionCard(a, () => openConfirmModal(a)) : null })()}
               {/* Close ↔ Reopen (admin only) */}
-              {isAdmin && (() => { const a = closeAction(account); return a ? renderActionCard(a, () => doAction(a.url, a.confirmMsg)) : null })()}
+              {isAdmin && (() => { const a = closeAction(account); return a ? renderActionCard(a, () => openConfirmModal(a)) : null })()}
             </div>
           </div>
 
@@ -800,6 +855,28 @@ export default function AccountDetailContent({ role }) {
                   <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Receipt not available.</div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================ CONFIRMATION MODAL ================ */}
+      {confirmAction && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '20px' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmAction(null) }}
+        >
+          <div className="form-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center', position: 'relative' }}>
+            <button onClick={() => setConfirmAction(null)}
+              style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <span className="material-symbols-rounded">close</span>
+            </button>
+            <span className="material-symbols-rounded" style={{ fontSize: '3rem', color: confirmAction.color, marginBottom: '8px', marginTop: '8px' }}>{confirmAction.icon}</span>
+            <h3 style={{ color: '#fff', marginBottom: '12px' }}>{confirmAction.modalTitle}</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>{confirmAction.modalMessage}</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={() => setConfirmAction(null)} className="btn btn-secondary">{confirmAction.cancelText || 'Cancel'}</button>
+              <button onClick={handleConfirm} className="btn btn-primary" style={{ background: confirmAction.color, border: 'none' }}>{confirmAction.confirmText}</button>
             </div>
           </div>
         </div>
