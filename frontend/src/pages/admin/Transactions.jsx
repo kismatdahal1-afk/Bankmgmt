@@ -37,6 +37,9 @@ export default function AdminTransactions() {
   const [filterStatus, setFilterStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [transactionId, setTransactionId] = useState('')
+  const [filterBy, setFilterBy] = useState('')
   const [receiptTxn, setReceiptTxn] = useState(null)
   const [receiptData, setReceiptData] = useState(null)
   const [receiptLoading, setReceiptLoading] = useState(false)
@@ -88,6 +91,9 @@ export default function AdminTransactions() {
     setFilterStatus('')
     setDateFrom('')
     setDateTo('')
+    setCustomerName('')
+    setTransactionId('')
+    setFilterBy('')
     fetchTransactions('/api/transactions/')
   }
 
@@ -162,13 +168,33 @@ export default function AdminTransactions() {
     w.document.close()
   }
 
+  const displayedTransactions = useMemo(() => {
+    let result = transactions
+    if (customerName) {
+      const q = customerName.toLowerCase()
+      result = result.filter(t => t.account?.customer?.full_name?.toLowerCase().includes(q))
+    }
+    if (transactionId) {
+      const q = transactionId.toLowerCase()
+      result = result.filter(t => (t.reference_number || t.transaction_uuid || '').toLowerCase().includes(q))
+    }
+    if (filterBy) {
+      const q = filterBy.toLowerCase()
+      result = result.filter(t => {
+        const by = (t.initiated_by_name || t.initiated_by_type || '').toLowerCase()
+        return by.includes(q)
+      })
+    }
+    return result
+  }, [transactions, customerName, transactionId, filterBy])
+
   const totals = useMemo(() => {
-    const total = transactions.length
-    const deposits = transactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0)
-    const withdrawals = transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + t.amount, 0)
-    const transfers = transactions.filter(t => t.type === 'transfer_out' || t.type === 'transfer_in').reduce((s, t) => s + t.amount, 0)
+    const total = displayedTransactions.length
+    const deposits = displayedTransactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0)
+    const withdrawals = displayedTransactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + t.amount, 0)
+    const transfers = displayedTransactions.filter(t => t.type === 'transfer_out' || t.type === 'transfer_in').reduce((s, t) => s + t.amount, 0)
     return { total, deposits, withdrawals, transfers }
-  }, [transactions])
+  }, [displayedTransactions])
 
   const initiatedByLabel = (txn) => {
     if (txn.initiated_by_type === 'system' || !txn.initiated_by_name) return '—'
@@ -214,58 +240,73 @@ export default function AdminTransactions() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Type</label>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)} className="form-control" style={{ padding: '6px 10px', fontSize: '0.85rem' }}>
-              <option value="">All Types</option>
-              <option value="deposit">Deposit</option>
-              <option value="withdrawal">Withdrawal</option>
-              <option value="transfer_out">Transfer Out</option>
-              <option value="transfer_in">Transfer In</option>
-            </select>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
+            <div className="form-group" style={{ margin: 0, minWidth: '60px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Customer Name</label>
+              <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Name..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '60px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Transaction ID</label>
+              <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Txn ID..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>By</label>
+              <input type="text" value={filterBy} onChange={e => setFilterBy(e.target.value)} placeholder="By..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Type</label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }}>
+                <option value="">All Types</option>
+                <option value="deposit">Deposit</option>
+                <option value="withdrawal">Withdrawal</option>
+                <option value="transfer_out">Transfer Out</option>
+                <option value="transfer_in">Transfer In</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Status</label>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }}>
+                <option value="">All Status</option>
+                <option value="successful">Successful</option>
+                <option value="pending">Pending</option>
+                <option value="failed">Failed</option>
+                <option value="reversed">Reversed</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '50px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>From</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: '50px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>To</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            </div>
           </div>
-          <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</label>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="form-control" style={{ padding: '6px 10px', fontSize: '0.85rem' }}>
-              <option value="">All Status</option>
-              <option value="successful">Successful</option>
-              <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
-              <option value="reversed">Reversed</option>
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0, minWidth: '130px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-control" style={{ padding: '6px 10px', fontSize: '0.85rem' }} />
-          </div>
-          <div className="form-group" style={{ margin: 0, minWidth: '130px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '6px 10px', fontSize: '0.85rem' }} />
-          </div>
-          <button onClick={handleFilter} className="btn btn-sm btn-secondary" style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
-            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>filter_alt</span> Filter
+          <button onClick={handleFilter} className="btn btn-sm" style={{ width: '75px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px', alignSelf: 'flex-end', background: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>search</span> Search
           </button>
-          <button onClick={handleReset} className="btn btn-sm btn-secondary" style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
-            Reset
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'stretch' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Link to="/admin/transactions/deposit" className="btn btn-success btn-sm" style={{ minWidth: '130px', textAlign: 'center' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: '16px', verticalAlign: 'middle' }}>add_circle</span> Deposit
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, alignSelf: 'flex-end' }}>
+            <Link to="/admin/transactions/deposit" className="btn btn-success btn-sm" style={{ width: '85px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>add_circle</span> Deposit
             </Link>
-            <Link to="/admin/transactions/withdraw" className="btn btn-danger btn-sm" style={{ minWidth: '130px', textAlign: 'center' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: '16px', verticalAlign: 'middle' }}>remove_circle</span> Withdraw
-            </Link>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={exportCSV} className="btn btn-sm" style={{ minWidth: '130px', textAlign: 'center', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', padding: '6px 14px' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: '16px', verticalAlign: 'middle' }}>file_download</span> Export CSV
+            <button onClick={exportPDF} className="btn btn-sm" style={{ width: '60px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>picture_as_pdf</span> PDF
             </button>
-            <button onClick={exportPDF} className="btn btn-sm" style={{ minWidth: '130px', textAlign: 'center', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', padding: '6px 14px' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: '16px', verticalAlign: 'middle' }}>picture_as_pdf</span> Export PDF
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ flex: 1, minWidth: 0 }} />
+          <button onClick={handleReset} className="btn btn-sm btn-secondary" style={{ width: '75px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>refresh</span> Reset
+          </button>
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+            <Link to="/admin/transactions/withdraw" className="btn btn-danger btn-sm" style={{ width: '85px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>remove_circle</span> Withdraw
+            </Link>
+            <button onClick={exportCSV} className="btn btn-sm" style={{ width: '60px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: '11px', verticalAlign: 'middle' }}>file_download</span> CSV
             </button>
           </div>
         </div>
@@ -274,7 +315,7 @@ export default function AdminTransactions() {
       <div className="table-container">
         <div className="table-header-bar">
           <span className="table-title">Transaction Ledger</span>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{transactions.length} entries</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{displayedTransactions.length} entries</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="custom-table txn-ledger-table">
@@ -293,7 +334,7 @@ export default function AdminTransactions() {
               </tr>
             </thead>
             <tbody>
-              {transactions.length > 0 ? transactions.map(txn => {
+              {displayedTransactions.length > 0 ? displayedTransactions.map(txn => {
                 const [txnPrefix, txnNum] = splitTxnId(txn.reference_number || txn.transaction_uuid)
                 const [txnDate, txnTime] = splitTimestamp(txn.created_at)
                 const balBefore = txn.balance_before != null ? formatCurrency(txn.balance_before) : '—'
