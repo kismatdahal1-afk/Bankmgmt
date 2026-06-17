@@ -3,8 +3,9 @@ from flask import session, request
 from database.db import db
 from models import AuditLog, Notification, Customer
 
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(_NPT).replace(tzinfo=None)
 
 def log_audit(action, resource_type=None, resource_id=None, description=None, status='success'):
     """Create an audit log entry from the current session context."""

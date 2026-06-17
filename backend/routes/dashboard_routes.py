@@ -1,5 +1,6 @@
 import datetime
 from decimal import Decimal
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session
 from database.db import db
 from models import Customer, Account, Transaction, Loan, Repayment
@@ -35,7 +36,7 @@ def dashboard():
 
     recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
 
-    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
+    today = datetime.datetime.now(_NPT).replace(tzinfo=None).date()
     dates = [today - datetime.timedelta(days=i) for i in range(6, -1, -1)]
 
     date_labels = [d.strftime('%b %d') for d in dates]
@@ -80,7 +81,7 @@ def dashboard():
 @login_required
 def reports():
     report_type = request.args.get('type', 'daily')
-    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
+    today = datetime.datetime.now(_NPT).replace(tzinfo=None).date()
 
     customers = Customer.query.filter_by(status='active').order_by(Customer.full_name).all()
 

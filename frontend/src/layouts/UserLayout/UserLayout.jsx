@@ -7,11 +7,11 @@ import NotificationBell from '../../components/notifications/NotificationBell'
 export default function UserLayout() {
   const { customer, customerLogout } = useAuth()
   const navigate = useNavigate()
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString())
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }))
   const [accountNumbers, setAccountNumbers] = useState([])
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString()), 1000)
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' })), 1000)
     api.get('/customer/accounts')
       .then(r => setAccountNumbers((r.data.accounts || []).map(a => a.account_number)))
       .catch(() => {})

@@ -3,8 +3,9 @@ from decimal import Decimal
 from database.db import db
 from models import Customer, Account, Transaction, Loan, Repayment
 
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(_NPT).replace(tzinfo=None)
 
 def _get_date_range(report_type, year=None, quarter=None):
     today = _utcnow().date()

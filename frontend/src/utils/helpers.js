@@ -6,10 +6,13 @@ export function formatCurrency(amount) {
   })
 }
 
+const NEPAL_TZ = 'Asia/Kathmandu'
+
 export function formatDate(dateStr) {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', {
+    timeZone: NEPAL_TZ,
     year: 'numeric',
     month: 'short',
     day: 'numeric'
@@ -20,6 +23,7 @@ export function formatDateTime(dateStr) {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   return d.toLocaleString('en-US', {
+    timeZone: NEPAL_TZ,
     year: 'numeric',
     month: 'short',
     day: 'numeric',

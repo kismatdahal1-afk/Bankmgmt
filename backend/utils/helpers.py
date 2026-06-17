@@ -4,8 +4,9 @@ from decimal import Decimal
 from database.db import db
 from models import Account, Customer
 
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(_NPT).replace(tzinfo=None)
 
 def generate_customer_id():
     last = Customer.query.filter(Customer.customer_id.isnot(None)).order_by(Customer.id.desc()).first()
@@ -27,7 +28,7 @@ def generate_password_from_name_phone(name, phone):
     return f"@{name_part}{phone_part}"
 
 def generate_account_number():
-    year = datetime.datetime.now().year
+    year = datetime.datetime.now(_NPT).year
     prefix = f'VB-{year}-'
     last = Account.query.filter(Account.account_number.like(f'{prefix}%')).order_by(Account.id.desc()).first()
     if last and last.account_number:

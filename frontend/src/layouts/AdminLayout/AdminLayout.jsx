@@ -6,10 +6,10 @@ import NotificationBell from '../../components/notifications/NotificationBell'
 export default function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString())
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }))
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString()), 1000)
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' })), 1000)
     return () => clearInterval(timer)
   }, [])
 

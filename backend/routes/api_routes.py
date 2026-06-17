@@ -16,8 +16,9 @@ from utils.report_helper import (
     generate_customer_report, generate_account_report, generate_customer_summary
 )
 
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(_NPT).replace(tzinfo=None)
 
 def _next_reference(prefix='TRF'):
     """Generate a globally sequential reference number."""
@@ -242,7 +243,7 @@ def _serialize_transaction(t):
 def _compute_loan_overdue(l):
     if l.status != 'approved':
         return False
-    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    now = datetime.datetime.now(_NPT).replace(tzinfo=None)
     if l.approved_date:
         months_elapsed = (now.year - l.approved_date.year) * 12 + (now.month - l.approved_date.month)
         expected_emis_paid = min(months_elapsed, l.duration_months)
@@ -1262,7 +1263,7 @@ def api_approve_loan(loan_id):
         return jsonify({'error': 'Customer has no active account'}), 400
     try:
         loan.status = 'approved'
-        loan.approved_date = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        loan.approved_date = datetime.datetime.now(_NPT).replace(tzinfo=None)
         loan.approved_by = session.get('user_id')
         active_account.balance += loan.amount
         lnd_ref = _next_reference('LND')
@@ -1439,7 +1440,7 @@ def api_dashboard():
 @staff_or_admin_required
 def api_reports():
     report_type = request.args.get('type', 'daily')
-    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
+    today = datetime.datetime.now(_NPT).replace(tzinfo=None).date()
     customers = Customer.query.filter_by(status='active').order_by(Customer.full_name).all()
     daily_summary = {'deposits': 0.0, 'withdrawals': 0.0, 'repayments': 0.0}
     daily_transactions = []

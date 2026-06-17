@@ -4,8 +4,9 @@ from decimal import Decimal
 from werkzeug.security import generate_password_hash, check_password_hash
 from database.db import db
 
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(_NPT).replace(tzinfo=None)
 
 class User(db.Model):
     """System operators (Admins and Staff)."""

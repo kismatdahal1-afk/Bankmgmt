@@ -32,6 +32,10 @@ export default function StaffDashboard() {
           <h1>Staff Dashboard</h1>
           <p>Real-time village bank metrics and activity overview</p>
         </div>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', padding: '6px 14px', borderRadius: '8px' }}>
+          <span className="material-symbols-rounded" style={{ fontSize: '16px', verticalAlign: '-3px' }}>today</span>
+          {' '}{new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kathmandu', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '24px' }}>

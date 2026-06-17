@@ -1,5 +1,6 @@
 import datetime
 from decimal import Decimal
+_NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from database.db import db
 from models import Customer, Account, Transaction, Loan, Repayment
@@ -86,7 +87,7 @@ def approve_loan(loan_id):
 
     try:
         loan.status = 'approved'
-        loan.approved_date = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        loan.approved_date = datetime.datetime.now(_NPT).replace(tzinfo=None)
         loan.approved_by = g.user.id if g.user else None
         active_account.balance += loan.amount
 

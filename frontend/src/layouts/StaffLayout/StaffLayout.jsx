@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import NotificationBell from '../../components/notifications/NotificationBell'
@@ -6,6 +6,12 @@ import NotificationBell from '../../components/notifications/NotificationBell'
 export default function StaffLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }))
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' })), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -46,6 +52,7 @@ export default function StaffLayout() {
       <main className="main-content">
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
           <NotificationBell />
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{currentTime}</span>
         </div>
         <Outlet />
       </main>
