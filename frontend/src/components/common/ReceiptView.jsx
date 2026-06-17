@@ -3,8 +3,6 @@
 import { formatCurrency } from '../../utils/helpers'
 
 const FOOTER_TEXT = `Thank you for using Village Bank.
-For any transaction-related inquiries,
-please contact your nearest branch or customer support.
 Village Bank Management System`
 
 export function buildPrintHTML(receipt, triggerPrint = false) {
@@ -224,9 +222,7 @@ export default function ReceiptView({ receipt, showActions = false, onViewReceip
 
           <div className="receipt-footer-text">
             Thank you for using <strong>Village Bank</strong>.<br />
-            For any transaction-related inquiries,<br />
-            please contact your nearest branch or customer support.<br />
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', display: 'block', marginTop: '4px' }}>Village Bank Management System</span>
+            Village Bank Management System
           </div>
         </div>
       </div>

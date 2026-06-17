@@ -81,8 +81,6 @@ export default function StaffTransactions() {
     const params = new URLSearchParams()
     if (filterType) params.set('type', filterType)
     if (filterStatus) params.set('status', filterStatus)
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
     fetchTransactions(`/api/transactions/filter?${params.toString()}`)
   }
 
@@ -170,6 +168,22 @@ export default function StaffTransactions() {
 
   const displayedTransactions = useMemo(() => {
     let result = transactions
+    if (dateFrom) {
+      const from = new Date(dateFrom + 'T00:00:00.000+05:45')
+      result = result.filter(t => {
+        if (!t.created_at) return false
+        const txn = new Date(t.created_at + '+05:45')
+        return txn >= from
+      })
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59.999+05:45')
+      result = result.filter(t => {
+        if (!t.created_at) return false
+        const txn = new Date(t.created_at + '+05:45')
+        return txn <= to
+      })
+    }
     if (customerName) {
       const q = customerName.toLowerCase()
       result = result.filter(t => t.account?.customer?.full_name?.toLowerCase().includes(q))
@@ -186,7 +200,7 @@ export default function StaffTransactions() {
       })
     }
     return result
-  }, [transactions, customerName, transactionId, filterBy])
+  }, [transactions, customerName, transactionId, filterBy, dateFrom, dateTo])
 
   const totals = useMemo(() => {
     const total = displayedTransactions.length
@@ -240,7 +254,12 @@ export default function StaffTransactions() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+      <div className="table-container" style={{ marginBottom: '16px', padding: '16px 20px' }}>
+        <div style={{ fontWeight: 600, fontSize: '1rem', color: '#fff', marginBottom: '12px' }}>
+          <span className="material-symbols-rounded" style={{ fontSize: '1.1rem', verticalAlign: 'middle', marginRight: '6px' }}>search</span>
+          Search &amp; Filters
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <div style={{ display: 'flex', gap: '6px' }}>
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
             <div className="form-group" style={{ margin: 0, minWidth: '70px' }}>
@@ -310,6 +329,7 @@ export default function StaffTransactions() {
             </button>
           </div>
         </div>
+      </div>
       </div>
 
       <div className="table-container">
