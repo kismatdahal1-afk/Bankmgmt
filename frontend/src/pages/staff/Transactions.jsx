@@ -242,22 +242,22 @@ export default function StaffTransactions() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '6px' }}>
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
-            <div className="form-group" style={{ margin: 0, minWidth: '60px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Customer Name</label>
-              <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Name..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
+            <div className="form-group" style={{ margin: 0, minWidth: '70px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Customer Name</label>
+              <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Name..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.9rem' }} />
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '60px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Transaction ID</label>
-              <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Txn ID..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            <div className="form-group" style={{ margin: 0, minWidth: '70px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Transaction ID</label>
+              <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Txn ID..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.9rem' }} />
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>By</label>
-              <input type="text" value={filterBy} onChange={e => setFilterBy(e.target.value)} placeholder="By..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            <div className="form-group" style={{ margin: 0, minWidth: '55px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>By</label>
+              <input type="text" value={filterBy} onChange={e => setFilterBy(e.target.value)} placeholder="By..." className="form-control" style={{ padding: '4px 5px', fontSize: '0.9rem' }} />
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Type</label>
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }}>
+            <div className="form-group" style={{ margin: 0, minWidth: '55px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Type</label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.9rem' }}>
                 <option value="">All Types</option>
                 <option value="deposit">Deposit</option>
                 <option value="withdrawal">Withdrawal</option>
@@ -265,9 +265,9 @@ export default function StaffTransactions() {
                 <option value="transfer_in">Transfer In</option>
               </select>
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '45px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Status</label>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }}>
+            <div className="form-group" style={{ margin: 0, minWidth: '55px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Status</label>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.9rem' }}>
                 <option value="">All Status</option>
                 <option value="successful">Successful</option>
                 <option value="pending">Pending</option>
@@ -275,13 +275,13 @@ export default function StaffTransactions() {
                 <option value="reversed">Reversed</option>
               </select>
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '50px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>From</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            <div className="form-group" style={{ margin: 0, minWidth: '48px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>From</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-control" style={{ padding: '4px 1px', fontSize: '0.9rem' }} />
             </div>
-            <div className="form-group" style={{ margin: 0, minWidth: '50px' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>To</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '4px 5px', fontSize: '0.82rem' }} />
+            <div className="form-group" style={{ margin: 0, minWidth: '48px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>To</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-control" style={{ padding: '4px 1px', fontSize: '0.9rem' }} />
             </div>
           </div>
           <button onClick={handleFilter} className="btn btn-sm" style={{ width: '75px', textAlign: 'center', padding: '3px 4px', fontSize: '0.78rem', height: '28px', alignSelf: 'flex-end', background: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
