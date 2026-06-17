@@ -38,24 +38,22 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '24px' }}>
-        <div style={{ gridColumn: 'span 2' }}>
-          <StatsCard title="Vault Balance" value={(() => { const p = formatCurrency(data?.total_deposits_balance || 0).split(' '); return <><span style={{ color: '#3b82f6' }}>{p[0]}</span> <span style={{ color: '#ffd54f' }}>{p[1]}</span></> })()} subtitle="Net deposits currently in vault" valueStyle={{ fontSize: '2.2rem' }} style={{ padding: '22px' }} />
+      <div style={{ display: 'flex', gap: '24px' }}>
+        <div style={{ width: '58%', display: 'flex' }}>
+          <StatsCard title="Vault Balance" value={(() => { const p = formatCurrency(data?.total_deposits_balance || 0).split(' '); return <><span style={{ color: '#3b82f6' }}>{p[0]}</span> <span style={{ color: '#ffd54f' }}>{p[1]}</span></> })()} subtitle="Net deposits currently in vault" valueStyle={{ fontSize: '2.2rem' }} style={{ padding: '22px', flex: 1, justifyContent: 'center' }} />
         </div>
-        <div style={{ gridColumn: 'span 2' }}>
-          <StatsCard title="Outstanding Loans" value={formatCurrency(data?.total_loan_receivable || 0)} subtitle={`${data?.active_loans_count || 0} Active Credit Accounts`} variant="warning" style={{ padding: '20px' }} />
-        </div>
-        <div style={{ gridColumn: 'span 2' }}>
-          <StatsCard title="Loan Disbursed" value={formatCurrency(data?.total_loan_disbursed || 0)} subtitle={`NPR ${(data?.total_loan_collected || 0).toLocaleString()} collected`} style={{ padding: '20px' }} />
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignContent: 'start', alignItems: 'start' }}>
+          <StatsCard title="Total Accounts" value={data?.total_accounts || 0} subtitle={`${data?.frozen_accounts || 0} frozen`} style={{ padding: '4px 14px', gap: '2px' }} />
+          <StatsCard title="Active Members" value={data?.total_customers || 0} subtitle="Registered cooperative members" variant="success" style={{ padding: '4px 14px', gap: '2px' }} />
+          <StatsCard title="Total Loans" value={data?.total_loans_count || 0} subtitle={`${data?.pending_loans_count || 0} pending approval`} variant="warning" style={{ padding: '4px 14px', gap: '2px' }} />
+          <StatsCard title="Today's Transactions" value={data?.today_transactions || 0} subtitle="processed today" variant="info" style={{ padding: '4px 14px', gap: '2px' }} />
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '24px', marginTop: '10px' }}>
-        <StatsCard title="Total Accounts" value={data?.total_accounts || 0} subtitle={`${data?.frozen_accounts || 0} frozen`} style={{ padding: '16px' }} />
-        <StatsCard title="Active Members" value={data?.total_customers || 0} subtitle="Registered cooperative members" variant="success" style={{ padding: '16px' }} />
-        <StatsCard title="Total Loans" value={data?.total_loans_count || 0} subtitle={`${data?.pending_loans_count || 0} pending approval`} variant="warning" style={{ padding: '16px' }} />
-        <StatsCard title="Today's Transactions" value={data?.today_transactions || 0} subtitle="processed today" variant="info" style={{ padding: '16px' }} />
-        <StatsCard title="Ledger Turnover" value={formatCurrency(data?.total_turnover || 0)} subtitle="Historical transacted volume" variant="danger" style={{ padding: '16px', gridColumn: 'span 2' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginTop: '10px' }}>
+        <StatsCard title="Outstanding Loans" value={formatCurrency(data?.total_loan_receivable || 0)} subtitle={`${data?.active_loans_count || 0} Active Credit Accounts`} variant="warning" style={{ padding: '20px' }} />
+        <StatsCard title="Loan Disbursed" value={formatCurrency(data?.total_loan_disbursed || 0)} subtitle={`NPR ${(data?.total_loan_collected || 0).toLocaleString()} collected`} style={{ padding: '20px' }} />
+        <StatsCard title="Ledger Turnover" value={formatCurrency(data?.total_turnover || 0)} subtitle="Historical transacted volume" variant="danger" style={{ padding: '20px' }} />
       </div>
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginTop: '10px' }}>
