@@ -41,12 +41,25 @@ import UserApplyAccount from '../pages/user/ApplyAccount'
 import UserMyBalance from '../pages/user/MyBalance'
 import UserMyLoans from '../pages/user/MyLoans'
 import UserApplyLoan from '../pages/user/ApplyLoan'
+import LoanApplyWizard from '../pages/user/LoanApplyWizard'
+import LoanTracking from '../pages/user/LoanTracking'
+import StaffLoanVerification from '../pages/staff/LoanVerification'
+import StaffLoanReview from '../pages/staff/LoanReview'
+import StaffLoanDashboard from '../pages/staff/StaffLoanDashboard'
+import StaffNewApplications from '../pages/staff/StaffNewApplications'
+import StaffVerificationQueue from '../pages/staff/StaffVerificationQueue'
+import StaffBranchVisits from '../pages/staff/StaffBranchVisits'
+import StaffActiveLoans from '../pages/staff/StaffActiveLoans'
+import AdminLoanApproval from '../pages/admin/LoanApproval'
+import AdminLoanReview from '../pages/admin/LoanReviewAdmin'
+import AdminLoanDashboard from '../pages/admin/LoanDashboard'
 import FundTransfer from '../pages/user/FundTransfer'
 import TransferSuccess from '../pages/user/TransferSuccess'
 import UserTransactions from '../pages/user/Transactions'
 import UserNotifications from '../pages/user/Notifications'
 import UserProfile from '../pages/user/Profile'
 import PrivateRoute from '../components/common/PrivateRoute'
+import PlaceholderPage from '../components/common/PlaceholderPage'
 
 export default function AppRoutes() {
   return (
@@ -73,6 +86,17 @@ export default function AppRoutes() {
         <Route path="settings" element={<AdminSettings />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="notifications" element={<AdminNotifications />} />
+        <Route path="loan/dashboard" element={<AdminLoanDashboard />} />
+        <Route path="loan/applications" element={<AdminLoanApproval />} />
+        <Route path="loan/applications/:id" element={<AdminLoanReview />} />
+        <Route path="loan/pending" element={<AdminLoanApproval />} />
+        <Route path="loan/active" element={<AdminLoans />} />
+        <Route path="loan/disbursed" element={<PlaceholderPage title="Disbursed Loans" icon="payments" />} />
+        <Route path="loan/closed" element={<PlaceholderPage title="Closed Loans" icon="folder" />} />
+        <Route path="loan/reports" element={<PlaceholderPage title="Loan Reports" icon="analytics" />} />
+        <Route path="loan-dashboard" element={<AdminLoanDashboard />} />
+        <Route path="loan-approval" element={<AdminLoanApproval />} />
+        <Route path="loan-approval/:id" element={<AdminLoanReview />} />
       </Route>
       <Route path="/staff" element={<PrivateRoute role="staff"><StaffLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
@@ -89,6 +113,18 @@ export default function AppRoutes() {
         <Route path="transactions/withdraw" element={<StaffTransactionForm />} />
         <Route path="reports" element={<StaffReports />} />
         <Route path="notifications" element={<StaffNotifications />} />
+        <Route path="loan/active" element={<StaffActiveLoans />} />
+        <Route path="loan/dashboard" element={<StaffLoanDashboard />} />
+        <Route path="loan/new-applications" element={<StaffNewApplications />} />
+        <Route path="loan/verification-queue" element={<StaffVerificationQueue />} />
+        <Route path="loan/visits" element={<StaffBranchVisits />} />
+          <Route path="loan/review/:id" element={<StaffLoanReview />} />
+        <Route path="loan/assigned" element={<StaffNewApplications />} />
+        <Route path="loan/pending" element={<StaffVerificationQueue />} />
+        <Route path="loan-verification" element={<StaffNewApplications />} />
+        <Route path="loan-verification/dashboard" element={<StaffLoanDashboard />} />
+        <Route path="loan-verification/:id" element={<StaffLoanReview />} />
+        <Route path="loan-verification/all" element={<StaffVerificationQueue />} />
       </Route>
       <Route path="/user" element={<PrivateRoute role="customer"><UserLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
@@ -98,6 +134,15 @@ export default function AppRoutes() {
         <Route path="my-balance" element={<UserMyBalance />} />
         <Route path="my-loans" element={<UserMyLoans />} />
         <Route path="loans/apply" element={<UserApplyLoan />} />
+        <Route path="loan/apply" element={<LoanApplyWizard />} />
+        <Route path="loan/apply/:id" element={<LoanApplyWizard />} />
+        <Route path="loan/tracking" element={<UserMyLoans />} />
+        <Route path="loan/tracking/:id" element={<LoanTracking />} />
+        <Route path="loan/active" element={<UserMyLoans />} />
+        <Route path="loan/history" element={<PlaceholderPage title="Loan History" icon="history" />} />
+        <Route path="loans/apply-wizard" element={<LoanApplyWizard />} />
+        <Route path="loans/apply-wizard/:id" element={<LoanApplyWizard />} />
+        <Route path="loans/tracking/:id" element={<LoanTracking />} />
         <Route path="transfer" element={<FundTransfer />} />
         <Route path="transfer/success" element={<TransferSuccess />} />
         <Route path="transactions" element={<UserTransactions />} />

@@ -1,0 +1,29 @@
+import api from './api'
+
+export const saveLoanDraft = (data) => api.post('/loan-applications/draft', data)
+export const submitLoanApplication = (data) => api.post('/loan-applications/submit', data)
+export const uploadLoanDocument = (formData) => api.post('/loan-applications/upload-document', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+export const deleteLoanDocument = (docId) => api.delete(`/loan-applications/document/${docId}`)
+export const getLoanApplication = (appId) => api.get(`/loan-applications/${appId}`)
+export const listMyLoanApplications = () => api.get('/loan-applications')
+export const trackLoanApplication = (appId) => api.get(`/loan-applications/${appId}/track`)
+export const deleteLoanApplication = (appId) => api.delete(`/loan-applications/${appId}`)
+
+export const staffListLoanApplications = (status) => api.get(`/staff/loan-applications?status=${status}`)
+export const staffGetLoanApplication = (appId) => api.get(`/staff/loan-applications/${appId}`)
+export const staffVerifyDocuments = (appId, data) => api.post(`/staff/loan-applications/${appId}/verify-documents`, data)
+export const staffRequestClarification = (appId, data) => api.post(`/staff/loan-applications/${appId}/request-clarification`, data)
+export const staffScheduleVisit = (appId, data) => api.post(`/staff/loan-applications/${appId}/schedule-visit`, data)
+export const staffAddRemarks = (appId, data) => api.post(`/staff/loan-applications/${appId}/remarks`, data)
+export const staffMoveToReview = (appId, data) => api.post(`/staff/loan-applications/${appId}/move-to-review`, data)
+
+export const adminListLoanApplications = (status) => api.get(`/admin/loan-applications?status=${status}`)
+export const adminGetLoanApplication = (appId) => api.get(`/admin/loan-applications/${appId}`)
+export const adminApproveLoan = (appId) => api.post(`/admin/loan-applications/${appId}/approve`)
+export const adminRejectLoan = (appId, data) => api.post(`/admin/loan-applications/${appId}/reject`, data)
+export const adminLoanDashboard = () => api.get('/admin/loan-dashboard')
+
+export const staffRejectApplication = (appId, data) => api.post(`/staff/loan-applications/${appId}/reject`, data)
+export const staffLoanDashboard = () => api.get('/staff/loan-dashboard')
+export const customerRespondClarification = (appId) => api.post(`/customer/loan-applications/${appId}/respond-clarification`)
+export const adminReturnToStaff = (appId, data) => api.post(`/admin/loan-applications/${appId}/return-to-staff`, data)

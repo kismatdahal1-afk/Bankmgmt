@@ -1,12 +1,13 @@
 import datetime
 import functools
+import os
 import uuid
 from decimal import Decimal
-from flask import Blueprint, request, jsonify, session, g
+from flask import Blueprint, request, jsonify, session, g, send_from_directory
 from sqlalchemy.orm import joinedload, subqueryload
 from extensions import limiter
 from database.db import db
-from models import User, Customer, Account, Transaction, Loan, Repayment, Notification, AuditLog
+from models import User, Customer, Account, Transaction, Loan, Repayment, Notification, AuditLog, LoanApplication, LoanDocument, LoanStatusHistory, ClarificationRequest, VerificationNote, Appointment
 from utils.helpers import generate_customer_id, generate_username_from_phone, generate_password_from_name_phone, generate_account_number, validate_citizenship_format
 from utils.emi_calculator import calculate_emi_and_payable
 from utils.audit_helper import log_audit, create_notification, notify_customer, notify_staff
@@ -1874,6 +1875,736 @@ def api_customer_repay_loan(loan_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# ==================== Loan Application Module API ====================
+
+def _serialize_loan_application(app):
+    return {
+        'id': app.id,
+        'application_number': app.application_number,
+        'customer_id': app.customer_id,
+        'customer_name': app.customer.full_name if app.customer else '',
+        'customer_phone': app.customer.phone_number if app.customer else '',
+        'alternate_mobile': app.customer.alternate_mobile if app.customer else '',
+        'customer_email': app.customer.email if app.customer else '',
+        'customer_address': app.customer.address if app.customer else '',
+        'citizenship_number': app.customer.citizenship_id if app.customer else '',
+        'occupation': app.customer.occupation if app.customer else '',
+        'permanent_address': app.customer.permanent_address if app.customer else '',
+        'current_address': app.customer.temporary_address if app.customer else '',
+        'father_name': app.customer.father_name if app.customer else '',
+        'grandfather_name': app.customer.grandfather_name if app.customer else '',
+        'dob': app.customer.dob.isoformat() if app.customer and app.customer.dob else None,
+        'gender': app.customer.gender if app.customer else '',
+        'citizenship_issue_district': app.customer.citizenship_issue_district if app.customer else '',
+        'marital_status': app.customer.marital_status if app.customer else '',
+        'nominee_name': app.customer.nominee_name if app.customer else '',
+        'nominee_contact': app.customer.nominee_contact if app.customer else '',
+        'nominee_relationship': app.customer.nominee_relationship if app.customer else '',
+        'loan_type': app.loan_type,
+        'amount': float(app.amount),
+        'duration_months': app.duration_months,
+        'interest_rate': float(app.interest_rate),
+        'purpose': app.purpose,
+        'collateral_type': app.collateral_type,
+        'status': app.status,
+        'assigned_staff_id': app.assigned_staff_id,
+        'assigned_staff_name': app.assigned_staff.username if app.assigned_staff else None,
+        'appointment_date': app.appointment_date.isoformat() if app.appointment_date else None,
+        'appointment_time': app.appointment_time,
+        'staff_remark': app.staff_remark,
+        'admin_remark': app.admin_remark,
+        'processing_notes': app.processing_notes,
+        'expected_processing_days': app.expected_processing_days,
+        'submitted_at': app.submitted_at.isoformat() if app.submitted_at else None,
+        'approved_at': app.approved_at.isoformat() if app.approved_at else None,
+        'rejected_at': app.rejected_at.isoformat() if app.rejected_at else None,
+        'disbursed_at': app.disbursed_at.isoformat() if app.disbursed_at else None,
+        'created_at': app.created_at.isoformat() if app.created_at else None,
+        'updated_at': app.updated_at.isoformat() if app.updated_at else None,
+        'documents': [{'id': d.id, 'document_type': d.document_type, 'file_name': d.file_name, 'file_path': d.file_path, 'file_url': f'api/uploads/loan_docs/{os.path.basename(d.file_path)}', 'file_size': d.file_size, 'uploaded_at': d.uploaded_at.isoformat() if d.uploaded_at else None} for d in app.documents],
+        'status_history': [{'id': h.id, 'old_status': h.old_status, 'new_status': h.new_status, 'changed_by': h.changed_by, 'changed_at': h.changed_at.isoformat() if h.changed_at else None, 'remarks': h.remarks} for h in app.status_history],
+        'clarification_requests': [{'id': c.id, 'request_by': c.request_by, 'reason': c.reason, 'is_resolved': c.is_resolved, 'created_at': c.created_at.isoformat() if c.created_at else None, 'resolved_at': c.resolved_at.isoformat() if c.resolved_at else None} for c in app.clarification_requests],
+        'verification_notes': [{'id': v.id, 'staff_id': v.staff_id, 'staff_name': v.staff.username if v.staff else None, 'notes': v.notes, 'created_at': v.created_at.isoformat() if v.created_at else None} for v in app.verification_notes],
+        'appointments': [{'id': a.id, 'appointment_date': a.appointment_date.isoformat() if a.appointment_date else None, 'appointment_time': a.appointment_time, 'remarks': a.remarks, 'created_by': a.created_by} for a in app.appointments]
+    }
+
+def _track_status_change(app, new_status, changed_by=None, remarks=None):
+    history = LoanStatusHistory(
+        loan_application_id=app.id,
+        old_status=app.status,
+        new_status=new_status,
+        changed_by=changed_by,
+        remarks=remarks
+    )
+    db.session.add(history)
+    app.status = new_status
+
+_LOAN_DOC_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'loan_docs')
+
+@api_bp.route('/uploads/loan_docs/<path:filename>')
+def serve_loan_doc(filename):
+    return send_from_directory(_LOAN_DOC_UPLOAD_DIR, filename)
+
+@api_bp.route('/loan-applications/draft', methods=['POST'])
+@customer_login_required_api
+def api_save_loan_draft():
+    try:
+        customer = g.current_customer
+        data = request.get_json(silent=True) or request.form
+        
+        existing_id = data.get('application_id')
+        if existing_id:
+            app = LoanApplication.query.filter_by(id=int(existing_id), customer_id=customer.id).first()
+            if not app:
+                return jsonify({'error': 'Application not found'}), 404
+        else:
+            app = LoanApplication(customer_id=customer.id, status='draft')
+            db.session.add(app)
+
+        app.loan_type = data.get('loan_type', app.loan_type)
+        app.amount = Decimal(str(data.get('amount', app.amount)))
+        app.duration_months = int(data.get('duration_months', app.duration_months))
+        app.purpose = data.get('purpose', app.purpose)
+        app.interest_rate = Decimal(str(data.get('interest_rate', '12.00')))
+        
+        db.session.commit()
+        return jsonify({'message': 'Draft saved', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications/<int:app_id>', methods=['GET'])
+@customer_login_required_api
+def api_get_loan_application(app_id):
+    app = LoanApplication.query.filter_by(id=app_id, customer_id=g.current_customer.id).first()
+    if not app:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify({'application': _serialize_loan_application(app)})
+
+
+@api_bp.route('/loan-applications/submit', methods=['POST'])
+@customer_login_required_api
+def api_submit_loan_application():
+    try:
+        customer = g.current_customer
+        data = request.get_json(silent=True) or request.form
+        app_id = data.get('application_id')
+        if not app_id:
+            return jsonify({'error': 'Application ID required'}), 400
+        app = LoanApplication.query.filter_by(id=int(app_id), customer_id=customer.id).first()
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        if app.status != 'draft':
+            return jsonify({'error': 'Application already submitted'}), 400
+        
+        required_docs = ['citizenship', 'income_proof', 'collateral']
+        uploaded_types = [d.document_type for d in app.documents]
+        missing = [d for d in required_docs if d not in uploaded_types]
+        if missing:
+            return jsonify({'error': f'Missing required documents: {", ".join(missing)}'}), 400
+
+        emi, total_payable = calculate_emi_and_payable(app.amount, app.interest_rate, app.duration_months)
+        _track_status_change(app, 'submitted', changed_by=customer.full_name, remarks='Application submitted by customer')
+        app.submitted_at = _utcnow()
+        db.session.commit()
+
+        log_audit('loan_application_submitted', 'loan_application', app.id,
+                  f'Loan application {app.application_number} submitted by {customer.full_name}')
+        notify_staff(None, 'New Loan Application',
+                     f'Customer {customer.full_name} submitted a {app.loan_type} loan application #{app.application_number} for {float(app.amount):,.2f}')
+
+        return jsonify({'message': 'Application submitted', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications/upload-document', methods=['POST'])
+@customer_login_required_api
+def api_upload_loan_document():
+    try:
+        customer = g.current_customer
+        application_id = request.form.get('application_id')
+        document_type = request.form.get('document_type')
+        if not all([application_id, document_type]):
+            return jsonify({'error': 'Application ID and document type required'}), 400
+        app = LoanApplication.query.filter_by(id=int(application_id), customer_id=customer.id).first()
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        allowed_ext = ('.jpg', '.jpeg', '.png')
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in allowed_ext:
+            return jsonify({'error': 'Only JPG, JPEG and PNG image files are allowed.'}), 400
+        
+        file_data = file.read()
+        if len(file_data) > 3 * 1024 * 1024:
+            return jsonify({'error': 'File size exceeds 3MB limit'}), 400
+
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'loan_docs')
+        os.makedirs(upload_dir, exist_ok=True)
+        safe_name = f"{app.application_number}_{document_type}_{uuid.uuid4().hex[:8]}{ext}"
+        file_path = os.path.join(upload_dir, safe_name)
+        with open(file_path, 'wb') as f:
+            f.write(file_data)
+
+        doc = LoanDocument(
+            loan_application_id=app.id,
+            document_type=document_type,
+            file_name=file.filename,
+            file_path=file_path,
+            file_size=len(file_data)
+        )
+        db.session.add(doc)
+        db.session.commit()
+        return jsonify({'message': 'Document uploaded', 'document': {'id': doc.id, 'document_type': doc.document_type, 'file_name': doc.file_name, 'file_path': doc.file_path, 'file_url': f'api/uploads/loan_docs/{os.path.basename(doc.file_path)}', 'file_size': doc.file_size}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications/document/<int:doc_id>', methods=['DELETE'])
+@customer_login_required_api
+def api_delete_loan_document(doc_id):
+    try:
+        doc = LoanDocument.query.get_or_404(doc_id)
+        app = LoanApplication.query.get(doc.loan_application_id)
+        if not app or app.customer_id != g.current_customer.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+        db.session.delete(doc)
+        db.session.commit()
+        return jsonify({'message': 'Document removed'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications/<int:app_id>', methods=['DELETE'])
+@customer_login_required_api
+def api_delete_loan_application(app_id):
+    try:
+        app = LoanApplication.query.filter_by(id=app_id, customer_id=g.current_customer.id).first()
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        if app.status != 'draft':
+            return jsonify({'error': 'Only draft applications can be deleted'}), 400
+        for doc in app.documents:
+            if doc.file_path and os.path.exists(doc.file_path):
+                os.remove(doc.file_path)
+            db.session.delete(doc)
+        LoanStatusHistory.query.filter_by(loan_application_id=app.id).delete()
+        ClarificationRequest.query.filter_by(loan_application_id=app.id).delete()
+        VerificationNote.query.filter_by(loan_application_id=app.id).delete()
+        Appointment.query.filter_by(loan_application_id=app.id).delete()
+        db.session.delete(app)
+        db.session.commit()
+        return jsonify({'message': 'Application deleted successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications', methods=['GET'])
+@customer_login_required_api
+def api_list_my_loan_applications():
+    customer = g.current_customer
+    apps = LoanApplication.query.filter_by(customer_id=customer.id).order_by(LoanApplication.created_at.desc()).all()
+    return jsonify({'applications': [_serialize_loan_application(a) for a in apps]})
+
+
+@api_bp.route('/loan-applications/<int:app_id>/track', methods=['GET'])
+@customer_login_required_api
+def api_track_loan_application(app_id):
+    app = LoanApplication.query.filter_by(id=app_id, customer_id=g.current_customer.id).first()
+    if not app:
+        return jsonify({'error': 'Not found'}), 404
+    from models import Customer, Account
+    customer = Customer.query.get(app.customer_id)
+    accounts = Account.query.filter_by(customer_id=app.customer_id, status='active').all()
+    return jsonify({
+        'application': _serialize_loan_application(app),
+        'customer': {
+            'full_name': customer.full_name if customer else '',
+            'father_name': customer.father_name if customer else '',
+            'grandfather_name': customer.grandfather_name if customer else '',
+            'dob': customer.dob.isoformat() if customer and customer.dob else None,
+            'gender': customer.gender if customer else '',
+            'phone_number': customer.phone_number if customer else '',
+            'alternate_mobile': customer.alternate_mobile if customer else '',
+            'email': customer.email if customer else '',
+            'address': customer.address if customer else '',
+            'permanent_address': customer.permanent_address if customer else '',
+            'temporary_address': customer.temporary_address if customer else '',
+            'citizenship_id': customer.citizenship_id if customer else '',
+            'citizenship_issue_district': customer.citizenship_issue_district if customer else '',
+            'marital_status': customer.marital_status if customer else '',
+            'occupation': customer.occupation if customer else '',
+            'nominee_name': customer.nominee_name if customer else '',
+            'nominee_contact': customer.nominee_contact if customer else '',
+            'nominee_relationship': customer.nominee_relationship if customer else ''
+        },
+        'accounts': [{'account_number': a.account_number, 'account_type': a.account_type} for a in accounts] if accounts else [],
+        'tracking': {
+            'status': app.status,
+            'submitted': app.submitted_at is not None,
+            'under_review': app.status in ('under_review', 'clarification_required', 'documents_verified', 'visit_scheduled', 'final_review', 'approved', 'rejected'),
+            'documents_verified': app.status in ('documents_verified', 'visit_scheduled', 'final_review', 'approved'),
+            'visit_scheduled': app.status in ('visit_scheduled', 'final_review', 'approved'),
+            'final_review': app.status in ('final_review', 'approved'),
+            'completed': app.status in ('approved', 'rejected')
+        }
+    })
+
+
+# ==================== Staff Loan Application API ====================
+
+@api_bp.route('/staff/loan-applications', methods=['GET'])
+@staff_or_admin_required
+def api_staff_list_loan_applications():
+    status_filter = request.args.get('status', 'submitted')
+    apps = LoanApplication.query.filter_by(status=status_filter).order_by(LoanApplication.submitted_at.asc()).all()
+    return jsonify({'applications': [_serialize_loan_application(a) for a in apps]})
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>', methods=['GET'])
+@staff_or_admin_required
+def api_staff_get_loan_application(app_id):
+    app = LoanApplication.query.get_or_404(app_id)
+    return jsonify({'application': _serialize_loan_application(app)})
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/verify-documents', methods=['POST'])
+@staff_or_admin_required
+def api_staff_verify_documents(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('submitted', 'clarification_required'):
+            return jsonify({'error': 'Invalid status for document verification'}), 400
+        data = request.get_json(silent=True) or request.form
+        _track_status_change(app, 'documents_verified', changed_by=g.current_user.username, remarks=data.get('remarks'))
+        log_audit('loan_documents_verified', 'loan_application', app.id,
+                  f'Documents verified for {app.application_number} by {g.current_user.username}')
+        notify_customer(app.customer_id, 'Documents Verified',
+                        f'Your documents for loan {app.application_number} have been verified by our team.')
+        db.session.commit()
+        return jsonify({'message': 'Documents verified', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/request-clarification', methods=['POST'])
+@staff_or_admin_required
+def api_staff_request_clarification(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('submitted', 'under_review', 'documents_verified'):
+            return jsonify({'error': 'Invalid status'}), 400
+        data = request.get_json(silent=True) or request.form
+        remark = (data.get('remarks') or '').strip()
+        if not remark:
+            return jsonify({'error': 'Clarification remark is required'}), 400
+        _track_status_change(app, 'clarification_required', changed_by=g.current_user.username, remarks=remark)
+        app.staff_remark = remark
+        log_audit('loan_clarification_requested', 'loan_application', app.id,
+                  f'Clarification requested for {app.application_number} by {g.current_user.username}')
+        notify_customer(app.customer_id, 'Clarification Required',
+                        f'Additional information/clarification needed for your loan {app.application_number}: {remark}')
+        db.session.commit()
+        return jsonify({'message': 'Clarification requested', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/schedule-visit', methods=['POST'])
+@staff_or_admin_required
+def api_staff_schedule_visit(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status != 'documents_verified':
+            return jsonify({'error': 'Documents must be verified first'}), 400
+        data = request.get_json(silent=True) or request.form
+        visit_date = data.get('appointment_date')
+        visit_time = data.get('appointment_time')
+        notes = data.get('notes', '')
+        if not visit_date:
+            return jsonify({'error': 'Appointment date is required'}), 400
+        from datetime import date
+        app.appointment_date = date.fromisoformat(visit_date)
+        app.appointment_time = visit_time
+        app.staff_remark = notes
+        _track_status_change(app, 'visit_scheduled', changed_by=g.current_user.username,
+                            remarks=f'Branch visit scheduled on {visit_date} {visit_time or ""}')
+        log_audit('loan_visit_scheduled', 'loan_application', app.id,
+                  f'Branch visit scheduled for {app.application_number} on {visit_date}')
+        notify_customer(app.customer_id, 'Branch Visit Scheduled',
+                        f'A branch visit has been scheduled for your loan {app.application_number} on {visit_date} at {visit_time or "TBA"}.')
+        db.session.commit()
+        return jsonify({'message': 'Visit scheduled', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/remarks', methods=['POST'])
+@staff_or_admin_required
+def api_staff_add_remarks(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        data = request.get_json(silent=True) or request.form
+        remarks = data.get('remarks', '')
+        app.staff_remark = remarks
+        db.session.commit()
+        return jsonify({'message': 'Remarks added', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/reject', methods=['POST'])
+@staff_or_admin_required
+def api_staff_reject_application(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('submitted', 'clarification_required', 'under_review'):
+            return jsonify({'error': 'Cannot reject in current status'}), 400
+        data = request.get_json(silent=True) or request.form
+        reason = (data.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'error': 'Rejection reason is required'}), 400
+        _track_status_change(app, 'rejected', changed_by=g.current_user.username, remarks=reason)
+        app.staff_remark = reason
+        log_audit('loan_rejected_by_staff', 'loan_application', app.id,
+                  f'Loan {app.application_number} rejected by staff {g.current_user.username}. Reason: {reason}')
+        notify_customer(app.customer_id, 'Loan Application Update',
+                        f'Your loan application {app.application_number} has been reviewed and was not approved. Reason: {reason}')
+        db.session.commit()
+        return jsonify({'message': 'Application rejected', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== Admin Loan Application API ====================
+
+@api_bp.route('/admin/loan-applications', methods=['GET'])
+@admin_required
+def api_admin_list_loan_applications():
+    status_filter = request.args.get('status', 'documents_verified')
+    apps = LoanApplication.query.filter_by(status=status_filter).order_by(LoanApplication.updated_at.desc()).all()
+    return jsonify({'applications': [_serialize_loan_application(a) for a in apps]})
+
+
+@api_bp.route('/admin/loan-applications/<int:app_id>', methods=['GET'])
+@admin_required
+def api_admin_get_loan_application(app_id):
+    app = LoanApplication.query.get_or_404(app_id)
+    customer = Customer.query.get(app.customer_id)
+    accounts = Account.query.filter_by(customer_id=app.customer_id).all()
+    existing_loans = Loan.query.filter_by(customer_id=app.customer_id).all()
+    transactions = Transaction.query.filter(Transaction.account_id.in_([a.id for a in accounts])).order_by(Transaction.created_at.desc()).limit(20).all() if accounts else []
+    return jsonify({
+        'application': _serialize_loan_application(app),
+        'customer': {
+            'id': customer.id, 'full_name': customer.full_name, 'phone_number': customer.phone_number,
+            'email': customer.email, 'address': customer.address, 'citizenship_id': customer.citizenship_id,
+            'occupation': customer.occupation, 'status': customer.status
+        },
+        'accounts': [{'id': a.id, 'account_number': a.account_number, 'account_type': a.account_type, 'balance': float(a.balance), 'status': a.status} for a in accounts],
+        'existing_loans': [{'id': l.id, 'loan_number': l.loan_number, 'amount': float(l.amount), 'status': l.status} for l in existing_loans],
+        'recent_transactions': [{'id': t.id, 'type': t.type, 'amount': float(t.amount), 'description': t.description, 'created_at': t.created_at.isoformat() if t.created_at else None} for t in transactions]
+    })
+
+
+@api_bp.route('/admin/loan-applications/<int:app_id>/approve', methods=['POST'])
+@admin_required
+def api_admin_approve_loan_application(app_id):
+    from datetime import date
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('visit_scheduled', 'final_review'):
+            return jsonify({'error': 'Loan must go through verification first'}), 400
+        active_account = Account.query.filter_by(customer_id=app.customer_id, status='active').with_for_update().first()
+        if not active_account:
+            return jsonify({'error': 'Customer has no active account'}), 400
+        
+        emi, total_payable = calculate_emi_and_payable(app.amount, app.interest_rate, app.duration_months)
+        loan = Loan(
+            customer_id=app.customer_id,
+            loan_number=f"LN-{uuid.uuid4().hex[:12].upper()}",
+            amount=app.amount,
+            interest_rate=app.interest_rate,
+            duration_months=app.duration_months,
+            emi=emi,
+            total_payable=total_payable,
+            status='approved',
+            applied_date=app.submitted_at or _utcnow(),
+            approved_date=_utcnow(),
+            approved_by=session.get('user_id')
+        )
+        db.session.add(loan)
+        
+        active_account.balance += app.amount
+        lnd_ref = _next_reference('LND')
+        txn = Transaction(
+            account_id=active_account.id,
+            type='deposit',
+            amount=app.amount,
+            balance_after=active_account.balance,
+            description=f"Loan Disbursement ({loan.loan_number})",
+            status='successful',
+            reference_number=lnd_ref,
+            created_by=session.get('user_id')
+        )
+        db.session.add(txn)
+        
+        _track_status_change(app, 'approved', changed_by=g.current_user.username, remarks='Loan approved and disbursed')
+        app.approved_at = _utcnow()
+        app.admin_remark = 'Approved'
+        
+        log_audit('loan_approved', 'loan_application', app.id,
+                  f'Loan {app.application_number} approved and disbursed {float(app.amount):,.2f} to account {active_account.account_number}')
+        notify_customer(app.customer_id, 'Loan Approved',
+                        f'Congratulations! Your loan {app.application_number} of {float(app.amount):,.2f} has been approved and disbursed to your account.')
+        db.session.commit()
+        
+        return jsonify({'message': 'Loan approved and disbursed', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/loan-applications/<int:app_id>/reject', methods=['POST'])
+@admin_required
+def api_admin_reject_loan_application(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        data = request.get_json(silent=True) or request.form
+        reason = (data.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'error': 'Rejection reason is mandatory'}), 400
+        _track_status_change(app, 'rejected', changed_by=g.current_user.username, remarks=reason)
+        app.rejected_at = _utcnow()
+        app.admin_remark = reason
+        log_audit('loan_rejected', 'loan_application', app.id,
+                  f'Loan {app.application_number} rejected. Reason: {reason}')
+        notify_customer(app.customer_id, 'Loan Application Update',
+                        f'Your loan application {app.application_number} has been reviewed and was not approved. Reason: {reason}')
+        db.session.commit()
+        return jsonify({'message': 'Loan rejected', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/loan-applications/<int:app_id>/return-to-staff', methods=['POST'])
+@admin_required
+def api_admin_return_to_staff(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('final_review', 'visit_scheduled', 'documents_verified'):
+            return jsonify({'error': 'Cannot return to staff from current status'}), 400
+        data = request.get_json(silent=True) or request.form
+        reason = (data.get('reason') or '').strip()
+        _track_status_change(app, 'submitted', changed_by=g.current_user.username,
+                            remarks=f'Returned to staff by admin. Reason: {reason or "Re-review needed"}')
+        log_audit('loan_returned_to_staff', 'loan_application', app.id,
+                  f'Loan {app.application_number} returned to staff by admin {g.current_user.username}')
+        notify_staff(None, 'Application Returned',
+                     f'Loan {app.application_number} has been returned for re-review by admin.')
+        db.session.commit()
+        return jsonify({'message': 'Returned to staff', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/loan-dashboard', methods=['GET'])
+@admin_required
+def api_admin_loan_dashboard():
+    from sqlalchemy import func, extract
+    
+    total_apps = LoanApplication.query.count()
+    pending_review = LoanApplication.query.filter(LoanApplication.status.in_(['submitted', 'under_review'])).count()
+    verified = LoanApplication.query.filter(LoanApplication.status.in_(['documents_verified', 'visit_scheduled', 'final_review'])).count()
+    approved = LoanApplication.query.filter_by(status='approved').count()
+    rejected = LoanApplication.query.filter_by(status='rejected').count()
+    clarification = LoanApplication.query.filter_by(status='clarification_required').count()
+    disbursed = LoanApplication.query.filter_by(status='disbursed').count()
+    
+    approved_apps = LoanApplication.query.filter(LoanApplication.status.in_(['approved', 'disbursed'])).all()
+    total_portfolio = sum(float(a.amount) for a in approved_apps) if approved_apps else 0
+    
+    all_loans = Loan.query.filter(Loan.status.in_(['approved', 'fully_paid'])).all()
+    total_disbursed = sum(float(l.amount) for l in all_loans) if all_loans else 0
+    total_outstanding = sum(float(l.total_payable - l.total_paid) for l in all_loans) if all_loans else 0
+    total_paid = sum(float(l.total_paid) for l in all_loans) if all_loans else 0
+    
+    monthly_data = db.session.query(
+        extract('year', LoanApplication.created_at).label('year'),
+        extract('month', LoanApplication.created_at).label('month'),
+        func.count(LoanApplication.id).label('count')
+    ).group_by('year', 'month').order_by('year', 'month').all()
+    monthly_applications = [{'year': int(r.year), 'month': int(r.month), 'count': r.count} for r in monthly_data]
+    
+    type_dist = db.session.query(
+        LoanApplication.loan_type,
+        func.count(LoanApplication.id).label('count')
+    ).group_by(LoanApplication.loan_type).all()
+    loan_type_dist = [{'type': r.loan_type, 'count': r.count} for r in type_dist]
+    
+    monthly_amounts = db.session.query(
+        extract('year', LoanApplication.approved_at).label('year'),
+        extract('month', LoanApplication.approved_at).label('month'),
+        func.sum(LoanApplication.amount).label('total')
+    ).filter(LoanApplication.status.in_(['approved', 'disbursed'])).group_by('year', 'month').order_by('year', 'month').all()
+    monthly_disbursement = [{'year': int(r.year), 'month': int(r.month), 'total': float(r.total)} for r in monthly_amounts]
+    
+    npa_loans = Loan.query.filter(Loan.status == 'overdue').count()
+    npa_rate = round((npa_loans / max(len(all_loans), 1)) * 100, 2) if all_loans else 0
+    
+    approval_rate = round((approved / max(total_apps, 1)) * 100, 1)
+    
+    return jsonify({
+        'total_applications': total_apps,
+        'pending_review': pending_review,
+        'verified_applications': verified,
+        'approved_loans': approved,
+        'rejected_loans': rejected,
+        'clarification_required': clarification,
+        'disbursed_loans': disbursed,
+        'total_portfolio': total_portfolio,
+        'total_disbursed': total_disbursed,
+        'outstanding_amount': total_outstanding,
+        'total_repaid': total_paid,
+        'monthly_applications': monthly_applications,
+        'loan_type_distribution': loan_type_dist,
+        'monthly_disbursement': monthly_disbursement,
+        'npa_count': npa_loans,
+        'npa_rate': npa_rate,
+        'approval_rate': approval_rate
+    })
+
+
+@api_bp.route('/staff/loan-dashboard', methods=['GET'])
+@staff_or_admin_required
+def api_staff_loan_dashboard():
+    staff_user = g.current_user
+    pending_verification = LoanApplication.query.filter_by(status='submitted').count()
+    clarification = LoanApplication.query.filter_by(status='clarification_required').count()
+    today = datetime.date.today()
+    visits_today = LoanApplication.query.filter(
+        LoanApplication.status == 'visit_scheduled',
+        LoanApplication.appointment_date == today
+    ).count()
+    processed_today = LoanStatusHistory.query.filter(
+        LoanStatusHistory.changed_by == staff_user.username,
+        func.date(LoanStatusHistory.changed_at) == today
+    ).count()
+    
+    assigned = LoanApplication.query.filter_by(assigned_staff_id=staff_user.id).order_by(LoanApplication.updated_at.desc()).all()
+    
+    recent_activity = db.session.query(
+        LoanStatusHistory, LoanApplication
+    ).join(LoanApplication, LoanStatusHistory.loan_application_id == LoanApplication.id
+    ).order_by(LoanStatusHistory.changed_at.desc()).limit(20).all()
+    
+    return jsonify({
+        'pending_verification': pending_verification,
+        'clarification_required': clarification,
+        'visits_today': visits_today,
+        'processed_today': processed_today,
+        'assigned_applications': [_serialize_loan_application(a) for a in assigned],
+        'recent_activity': [{
+            'id': h.id,
+            'application_number': app.application_number,
+            'action': f'{h.old_status or "—"} → {h.new_status}',
+            'remarks': h.remarks,
+            'changed_by': h.changed_by,
+            'changed_at': h.changed_at.isoformat() if h.changed_at else None
+        } for h, app in recent_activity]
+    })
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/move-to-review', methods=['POST'])
+@staff_or_admin_required
+def api_staff_move_to_review(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        if app.status not in ('visit_scheduled',):
+            return jsonify({'error': 'Visit must be completed first'}), 400
+        data = request.get_json(silent=True) or request.form
+        _track_status_change(app, 'final_review', changed_by=g.current_user.username, remarks=data.get('remarks', 'Moved to final review'))
+        db.session.commit()
+        return jsonify({'message': 'Application moved to final review', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/loan-applications/notify-staff', methods=['POST'])
+def api_notify_staff_new():
+    data = request.get_json(silent=True) or request.form
+    message = data.get('message', 'New loan application submitted')
+    staff_users = User.query.filter(User.role.in_(['staff', 'admin'])).all()
+    for u in staff_users:
+        notify_staff(u.id, 'New Loan Application', message)
+    return jsonify({'message': 'Staff notified'})
+
+
+@api_bp.route('/staff/loan-applications/<int:app_id>/assign', methods=['POST'])
+@staff_or_admin_required
+def api_staff_assign_application(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        data = request.get_json(silent=True) or request.form
+        staff_id = data.get('staff_id')
+        if staff_id:
+            app.assigned_staff_id = int(staff_id)
+        else:
+            app.assigned_staff_id = g.current_user.id
+        db.session.commit()
+        return jsonify({'message': 'Application assigned', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/customer/loan-applications/<int:app_id>/respond-clarification', methods=['POST'])
+@customer_login_required_api
+def api_customer_respond_clarification(app_id):
+    try:
+        customer = g.current_customer
+        app = LoanApplication.query.filter_by(id=app_id, customer_id=customer.id).first()
+        if not app:
+            return jsonify({'error': 'Not found'}), 404
+        if app.status != 'clarification_required':
+            return jsonify({'error': 'No clarification pending'}), 400
+        
+        for cr in app.clarification_requests:
+            if not cr.is_resolved:
+                cr.is_resolved = True
+                cr.resolved_at = _utcnow()
+        
+        _track_status_change(app, 'submitted', changed_by=customer.full_name, remarks='Customer responded to clarification request')
+        db.session.commit()
+        notify_staff(None, 'Clarification Response',
+                     f'Customer {customer.full_name} has responded to the clarification request for {app.application_number}.')
+        return jsonify({'message': 'Response submitted', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/customer/transfer', methods=['POST'])
 @customer_login_required_api
 def api_customer_transfer():
@@ -2087,6 +2818,7 @@ def api_customer_profile_update():
     address = (data.get('address') or '').strip()
     permanent_address = (data.get('permanent_address') or '').strip()
     temporary_address = (data.get('temporary_address') or '').strip()
+    occupation = (data.get('occupation') or '').strip()
     if email:
         customer.email = email
     if alternate_mobile:
@@ -2097,6 +2829,8 @@ def api_customer_profile_update():
         customer.permanent_address = permanent_address
     if temporary_address:
         customer.temporary_address = temporary_address
+    if occupation:
+        customer.occupation = occupation
     db.session.flush()
     log_audit('customer_profile_updated', 'customer', customer.id,
         f'Profile updated by customer {customer.full_name}')

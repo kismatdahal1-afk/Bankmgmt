@@ -212,6 +212,120 @@ class ReferenceSequence(db.Model):
         return seq.counter
 
 
+class LoanApplication(db.Model):
+    __tablename__ = 'loan_applications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    application_number = db.Column(db.String(30), unique=True, nullable=False, default=lambda: f"LA-{uuid.uuid4().hex[:10].upper()}")
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
+    loan_type = db.Column(db.String(30), nullable=False)
+    amount = db.Column(db.Numeric(15, 2), nullable=False)
+    duration_months = db.Column(db.Integer, nullable=False)
+    interest_rate = db.Column(db.Numeric(5, 2), nullable=False, default=Decimal('12.00'))
+    purpose = db.Column(db.Text, nullable=True)
+    collateral_type = db.Column(db.String(100), nullable=True)
+    status = db.Column(db.String(30), default='draft', nullable=False)
+    assigned_staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    appointment_date = db.Column(db.Date, nullable=True)
+    appointment_time = db.Column(db.String(10), nullable=True)
+    staff_remark = db.Column(db.Text, nullable=True)
+    admin_remark = db.Column(db.Text, nullable=True)
+    processing_notes = db.Column(db.Text, nullable=True)
+    expected_processing_days = db.Column(db.Integer, default=7)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    rejected_at = db.Column(db.DateTime, nullable=True)
+    disbursed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
+
+    customer = db.relationship('Customer', backref='loan_applications', lazy=True)
+    assigned_staff = db.relationship('User', backref='assigned_applications', lazy=True)
+    documents = db.relationship('LoanDocument', backref='application', lazy=True, cascade="all, delete-orphan")
+    status_history = db.relationship('LoanStatusHistory', backref='application', lazy=True, cascade="all, delete-orphan")
+    clarification_requests = db.relationship('ClarificationRequest', backref='application', lazy=True, cascade="all, delete-orphan")
+    verification_notes = db.relationship('VerificationNote', backref='application', lazy=True, cascade="all, delete-orphan")
+    appointments = db.relationship('Appointment', backref='application', lazy=True, cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<LoanApplication {self.application_number} - {self.status}>"
+
+
+class LoanDocument(db.Model):
+    __tablename__ = 'loan_documents'
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_application_id = db.Column(db.Integer, db.ForeignKey('loan_applications.id'), nullable=False, index=True)
+    document_type = db.Column(db.String(50), nullable=False)
+    file_name = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer, nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=_utcnow)
+
+    def __repr__(self):
+        return f"<LoanDocument {self.document_type} - {self.file_name}>"
+
+
+class LoanStatusHistory(db.Model):
+    __tablename__ = 'loan_status_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_application_id = db.Column(db.Integer, db.ForeignKey('loan_applications.id'), nullable=False, index=True)
+    old_status = db.Column(db.String(30), nullable=True)
+    new_status = db.Column(db.String(30), nullable=False)
+    changed_by = db.Column(db.String(100), nullable=True)
+    changed_at = db.Column(db.DateTime, default=_utcnow)
+    remarks = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f"<LoanStatusHistory #{self.id} - {self.old_status} -> {self.new_status}>"
+
+
+class ClarificationRequest(db.Model):
+    __tablename__ = 'clarification_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_application_id = db.Column(db.Integer, db.ForeignKey('loan_applications.id'), nullable=False, index=True)
+    request_by = db.Column(db.String(100), nullable=True)
+    reason = db.Column(db.Text, nullable=False)
+    is_resolved = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<ClarificationRequest #{self.id} - Resolved: {self.is_resolved}>"
+
+
+class VerificationNote(db.Model):
+    __tablename__ = 'verification_notes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_application_id = db.Column(db.Integer, db.ForeignKey('loan_applications.id'), nullable=False, index=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    notes = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+    staff = db.relationship('User', backref='verification_notes', lazy=True)
+
+    def __repr__(self):
+        return f"<VerificationNote #{self.id}>"
+
+
+class Appointment(db.Model):
+    __tablename__ = 'appointments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_application_id = db.Column(db.Integer, db.ForeignKey('loan_applications.id'), nullable=False, index=True)
+    appointment_date = db.Column(db.Date, nullable=False)
+    appointment_time = db.Column(db.String(10), nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+    def __repr__(self):
+        return f"<Appointment #{self.id} - {self.appointment_date}>"
+
+
 class AuditLog(db.Model):
     """Audit trail for all critical system actions."""
     __tablename__ = 'audit_logs'
