@@ -27,8 +27,6 @@ export default function LoanApplyWizard() {
   const [checked, setChecked] = useState(false)
   const [submittedApp, setSubmittedApp] = useState(null)
   const [personal, setPersonal] = useState(null)
-  const [personalSaving, setPersonalSaving] = useState(false)
-
   const [form, setForm] = useState({
     loan_type: '', amount: '', duration_months: '', purpose: '', collateral_type: '', interest_rate: 12.00
   })
@@ -49,8 +47,13 @@ export default function LoanApplyWizard() {
         purpose: app.purpose || '', collateral_type: app.collateral_type || '', interest_rate: app.interest_rate || 12.00
       })
       const docs = { citizenship: null, income_proof: null, collateral: null }
-      app.documents.forEach(d => { docs[d.document_type] = d })
+      const prevs = {}
+      app.documents.forEach(d => {
+        docs[d.document_type] = d
+        if (d.file_url) prevs[d.document_type] = '/' + d.file_url
+      })
       setDocuments(docs)
+      setPreviews(prevs)
       if (app.status === 'submitted') { setStep(3); setSubmittedApp(app) }
     } catch (e) { setError('Failed to load application') }
   }, [])
@@ -62,24 +65,6 @@ export default function LoanApplyWizard() {
   }, [])
 
   const handlePersonalChange = (field, value) => setPersonal(prev => ({ ...prev, [field]: value }))
-
-  const handleSavePersonal = async () => {
-    setPersonalSaving(true)
-    try {
-      const res = await updateCustomerProfile({
-        email: personal.email,
-        alternate_mobile: personal.alternate_mobile,
-        address: personal.address,
-        permanent_address: personal.permanent_address,
-        temporary_address: personal.temporary_address,
-        occupation: personal.occupation
-      })
-      setPersonal(res.data.customer)
-      setSuccess('Personal details updated'); setTimeout(() => setSuccess(''), 2000)
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to update profile')
-    } finally { setPersonalSaving(false) }
-  }
 
   const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -106,6 +91,16 @@ export default function LoanApplyWizard() {
     } else if (step === 1) {
       const missing = DOC_TYPES.filter(dt => !documents[dt.key])
       if (missing.length > 0) { setError('Please upload all required documents'); return }
+      if (personal) {
+        try { await updateCustomerProfile({
+          email: personal.email,
+          alternate_mobile: personal.alternate_mobile,
+          address: personal.address,
+          permanent_address: personal.permanent_address,
+          temporary_address: personal.temporary_address,
+          occupation: personal.occupation
+        }) } catch (e) { /* silent */ }
+      }
       setError(''); setStep(2)
     }
   }
@@ -387,12 +382,6 @@ export default function LoanApplyWizard() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary" onClick={handleSavePersonal} disabled={personalSaving}>
-              <span className="material-symbols-rounded">{personalSaving ? 'sync' : 'save'}</span>
-              {personalSaving ? 'Saving...' : 'Save Personal Details'}
-            </button>
-          </div>
         </div>
       )}
 

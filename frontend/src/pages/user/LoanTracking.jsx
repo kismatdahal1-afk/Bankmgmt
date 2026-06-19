@@ -650,6 +650,14 @@ export default function LoanTracking() {
                   <div className="rs-grid-item-label">Interest Rate</div>
                   <div className="rs-grid-item-value">{app.interest_rate}%</div>
                 </div>
+                <div className="rs-grid-item">
+                  <div className="rs-grid-item-label">Collateral Type</div>
+                  <div className="rs-grid-item-value">{app.collateral_type || 'N/A'}</div>
+                </div>
+                <div className="rs-grid-item">
+                  <div className="rs-grid-item-label">Purpose</div>
+                  <div className="rs-grid-item-value">{app.purpose || '—'}</div>
+                </div>
               </div>
 
               <div className="rs-repayment-box">
@@ -825,6 +833,14 @@ export default function LoanTracking() {
             <div className="as-info-card">
               <div className="as-info-label">Interest Rate</div>
               <div className="as-info-value">{app.interest_rate}%</div>
+            </div>
+            <div className="as-info-card">
+              <div className="as-info-label">Collateral Type</div>
+              <div className="as-info-value">{app.collateral_type || 'N/A'}</div>
+            </div>
+            <div className="as-info-card">
+              <div className="as-info-label">Purpose</div>
+              <div className="as-info-value">{app.purpose || '—'}</div>
             </div>
             <div className="as-info-card">
               <div className="as-info-label">Est. EMI</div>
