@@ -294,29 +294,31 @@ export default function AdminLoanReview() {
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>person</span> Customer
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{customer.phone_number || app.customer_phone || '—'}</div>
+            <div style={{ fontSize: 25, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>{customer.phone_number || app.customer_phone || '—'}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>payments</span> Loan Type
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.loan_type}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontWeight: 700, fontSize: 13 }}>Rs</span> Amount
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.emi || '—')}</div>
+            <div style={{ fontSize: 25, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.amount && app.interest_rate && app.duration_months
+              ? (() => { const mr = (app.interest_rate / 12) / 100; const n = app.duration_months; const p = app.amount; return p * mr * Math.pow(1 + mr, n) / (Math.pow(1 + mr, n) - 1) || 0 })()
+              : 0)}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>assignment_ind</span> Assigned To
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.assigned_staff_name || 'Unassigned'}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -329,7 +331,7 @@ export default function AdminLoanReview() {
               }} />
               <span style={{ color: riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981' }}>{riskLevel.toUpperCase()}</span>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>DTI: {dti}%</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>DTI: {dti}%</div>
           </div>
         </div>
       </div>

@@ -137,13 +137,13 @@ export default function StaffLoanReview() {
         @media (max-width: 900px) { .sr-layout { flex-direction: column; } .sr-side { max-width: 100%; position: static; } }
 
         .sr-section { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 14px; padding: 20px 22px; }
-        .sr-section-title { font-size: 13px; font-weight: 700; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-        .sr-section-title .mat-icon { font-size: 18px; color: var(--accent-color,#3b82f6); }
+        .sr-section-title { font-size: 13px; font-weight: 800; color: #d4dbe5; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+        .sr-section-title .mat-icon { font-size: 18px; color: #d4dbe5; }
 
         .sr-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         @media (max-width: 600px) { .sr-grid-2 { grid-template-columns: 1fr; } }
         .sr-field { background: rgba(0,0,0,0.06); border-radius: 8px; padding: 10px 12px; }
-        .sr-field-label { font-size: 11px; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.3px; }
+        .sr-field-label { font-size: 11px; font-weight: 700; color: #b4c2d0; text-transform: uppercase; letter-spacing: 0.3px; }
         .sr-field-value { font-size: 14px; font-weight: 600; color: #fff; margin-top: 3px; }
         .sr-field-value.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
 
@@ -164,11 +164,11 @@ export default function StaffLoanReview() {
         .sr-doc-missing .mat-icon { font-size: 28px; }
 
         .sr-verif-panel { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 14px; padding: 18px; }
-        .sr-verif-title { font-size: 13px; font-weight: 700; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-        .sr-verif-title .mat-icon { font-size: 18px; color: var(--accent-color,#3b82f6); }
+        .sr-verif-title { font-size: 13px; font-weight: 800; color: #d4dbe5; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+        .sr-verif-title .mat-icon { font-size: 18px; color: #d4dbe5; }
         .sr-verif-item { padding: 8px 0; border-bottom: 1px solid rgba(55,65,81,0.08); }
         .sr-verif-item:last-child { border-bottom: none; }
-        .sr-verif-item-label { font-size: 12px; color: var(--text-secondary,#94a3b8); margin-bottom: 4px; }
+        .sr-verif-item-label { font-size: 12px; font-weight: 700; color: #b4c2d0; margin-bottom: 4px; }
         .sr-verif-status { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
 
         .sr-action-stack { display: flex; flex-direction: column; gap: 8px; }
@@ -179,12 +179,12 @@ export default function StaffLoanReview() {
         .sr-tl-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
         .sr-tl-content { flex: 1; min-width: 0; }
         .sr-tl-action { font-size: 13px; color: #fff; font-weight: 600; }
-        .sr-tl-remark { font-size: 11px; color: var(--text-secondary,#94a3b8); margin-top: 2px; }
-        .sr-tl-date { font-size: 11px; color: var(--text-muted); }
+        .sr-tl-remark { font-size: 11px; font-weight: 500; color: #b4c2d0; margin-top: 2px; }
+        .sr-tl-date { font-size: 11px; font-weight: 500; color: #b4c2d0; }
 
         .sr-panel-card { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 14px; padding: 18px; }
-        .sr-panel-title { font-size: 13px; font-weight: 700; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-        .sr-panel-title .mat-icon { font-size: 18px; color: var(--accent-color,#3b82f6); }
+        .sr-panel-title { font-size: 13px; font-weight: 800; color: #d4dbe5; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+        .sr-panel-title .mat-icon { font-size: 18px; color: #d4dbe5; }
 
         .sr-quick-info { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 14px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
         .sr-qi-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -235,22 +235,22 @@ export default function StaffLoanReview() {
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>person</span> Customer
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.customer_phone || '—'}</div>
+            <div style={{ fontSize: 25, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>{app.customer_phone || '—'}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>payments</span> Loan Type
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.loan_type}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontWeight: 700, fontSize: 13 }}>Rs</span> Amount
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.amount && app.interest_rate && app.duration_months
+            <div style={{ fontSize: 25, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.amount && app.interest_rate && app.duration_months
               ? (() => { const mr = (app.interest_rate / 12) / 100; const n = app.duration_months; const p = app.amount; return p * mr * Math.pow(1 + mr, n) / (Math.pow(1 + mr, n) - 1) || 0 })()
               : 0)}</div>
           </div>
@@ -259,7 +259,7 @@ export default function StaffLoanReview() {
               <span className="material-symbols-rounded" style={{ fontSize: 13 }}>assignment_ind</span> Assigned To
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.assigned_staff_name || 'Unassigned'}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
           </div>
         </div>
       </div>
@@ -393,7 +393,7 @@ export default function StaffLoanReview() {
               </div>
               <div className="sr-field">
                 <div className="sr-field-label">Submitted</div>
-                <div className="sr-field-value" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{formatDate(app.submitted_at)}</div>
+                <div className="sr-field-value" style={{ fontSize: '13px', color: '#b4c2d0' }}>{formatDate(app.submitted_at)}</div>
               </div>
             </div>
           </div>
