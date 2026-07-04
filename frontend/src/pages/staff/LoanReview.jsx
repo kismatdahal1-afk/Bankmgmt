@@ -5,6 +5,20 @@ import { formatCurrency, formatDate } from '../../utils/helpers'
 
 const DOC_LABELS = { citizenship: 'Citizenship / National ID', income_proof: 'Income Proof', collateral: 'Collateral Document' }
 const STATUS_COLORS = { submitted: '#3b82f6', clarification_required: '#f59e0b', documents_verified: '#10b981', visit_scheduled: '#6366f1', final_review: '#8b5cf6', approved: '#10b981', rejected: '#ef4444' }
+const STATUS_ROLE = {
+  submitted:'User', under_review:'Staff', clarification_required:'Staff',
+  documents_verified:'Staff', visit_scheduled:'Staff',
+  final_review:'Admin', approved:'Admin', rejected:'Admin', disbursed:'Admin'
+}
+
+function derivePerformer(h) {
+  var er = STATUS_ROLE[h.new_status] || ''
+  var ar = h.changed_by_role || ''
+  var r = er || ar
+  var rn = (h.changed_by || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+  var cp = /^(?:User|Staff|Admin)$/i.test(rn)
+  return (er && er === ar && !cp) ? rn : r
+}
 
 export default function StaffLoanReview() {
   const { id } = useParams()
@@ -593,7 +607,7 @@ export default function StaffLoanReview() {
                   <div className="sr-tl-content">
                     <div className="sr-tl-action">{h.old_status || '—'} → {h.new_status}</div>
                     {h.remarks && <div className="sr-tl-remark">{h.remarks}</div>}
-                    <div className="sr-tl-date">{formatDate(h.changed_at)} by {h.changed_by_role || h.changed_by}</div>
+                    <div className="sr-tl-date">{formatDate(h.changed_at)} by {derivePerformer(h)}</div>
                   </div>
                 </div>
               ))

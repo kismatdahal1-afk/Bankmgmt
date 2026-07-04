@@ -5,6 +5,20 @@ import EmptyState from '../../components/common/EmptyState'
 import Pagination from '../../components/common/Pagination'
 
 const STATUS_MAP = { approved:'badge-success', disbursed:'badge-success' }
+const STATUS_ROLE = {
+  submitted:'User', under_review:'Staff', clarification_required:'Staff',
+  documents_verified:'Staff', visit_scheduled:'Staff',
+  final_review:'Admin', approved:'Admin', rejected:'Admin', disbursed:'Admin'
+}
+
+function derivePerformer(h) {
+  var er = STATUS_ROLE[h.new_status] || ''
+  var ar = h.changed_by_role || ''
+  var r = er || ar
+  var rn = (h.changed_by || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+  var cp = /^(?:User|Staff|Admin)$/i.test(rn)
+  return (er && er === ar && !cp) ? rn : r
+}
 
 export default function AdminDisbursedLoans() {
   const [data, setData] = useState(null)
@@ -60,7 +74,7 @@ export default function AdminDisbursedLoans() {
                 <div className="tlv-content">
                   <div style={{ fontWeight: 600, fontSize: 13, textTransform: 'capitalize' }}>{h.new_status.replace(/_/g, ' ')}</div>
                   {h.remarks && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.remarks}</div>}
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.changed_by ? `by ${h.changed_by_role || h.changed_by}` : ''} &middot; {h.changed_at ? formatDate(h.changed_at) : ''}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.changed_by ? ('by ' + derivePerformer(h)) : ''} &middot; {h.changed_at ? formatDate(h.changed_at) : ''}</div>
                 </div>
               </div>
             ))}

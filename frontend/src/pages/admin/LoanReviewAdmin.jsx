@@ -1,15 +1,98 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminGetLoanApplication, adminApproveLoan, adminRejectLoan, adminReturnToStaff } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/helpers'
 
 const DOC_LABELS = {
-  citizenship:'Citizenship / National ID',
-  income_proof:'Income Proof / Salary Slip',
-  collateral:'Collateral Document',
-  bank_statement:'Bank Statement',
-  business_license:'Business License',
-  property_document:'Property Document'
+  citizenship: 'Citizenship / National ID',
+  income_proof: 'Income Proof / Salary Slip',
+  collateral: 'Collateral Document'
+}
+
+const TIMELINE_STEPS = [
+  { key: 'submitted', label: 'Application Submitted' },
+  { key: 'under_review', label: 'Staff Review' },
+  { key: 'documents_verified', label: 'Documents Verified' },
+  { key: 'visit_scheduled', label: 'Branch Visit Scheduled' },
+  { key: 'final_review', label: 'Forwarded to Admin' },
+  { key: 'decision', label: 'Admin Decision' }
+]
+
+const STATUS_BADGE = {
+  submitted: 'badge-info', under_review: 'badge-info',
+  clarification_required: 'badge-warning', documents_verified: 'badge-success',
+  visit_scheduled: 'badge-info', final_review: 'badge-warning',
+  approved: 'badge-success', rejected: 'badge-danger',
+  disbursed: 'badge-success', draft: 'badge-muted'
+}
+
+const STATUS_LABEL = {
+  submitted: 'Submitted', under_review: 'Staff Review',
+  clarification_required: 'Clarification Required', documents_verified: 'Documents Verified',
+  visit_scheduled: 'Visit Scheduled', final_review: 'Admin Review',
+  approved: 'Approved', rejected: 'Rejected',
+  disbursed: 'Disbursed', draft: 'Draft'
+}
+
+const TIMELINE_COLORS = {
+  draft:'#6b7280', submitted:'#3b82f6', under_review:'#8b5cf6',
+  clarification_required:'#f59e0b', documents_verified:'#10b981',
+  visit_scheduled:'#6366f1', final_review:'#8b5cf6',
+  approved:'#10b981', rejected:'#ef4444', disbursed:'#059669'
+}
+
+const TIMELINE_ICONS = {
+  draft:'edit_note', submitted:'how_to_reg', under_review:'manage_search',
+  clarification_required:'feedback', documents_verified:'verified',
+  visit_scheduled:'event', final_review:'fact_check',
+  approved:'check_circle', rejected:'cancel', disbursed:'account_balance'
+}
+
+const STATUS_ROLE = {
+  submitted:'User', under_review:'Staff', clarification_required:'Staff',
+  documents_verified:'Staff', visit_scheduled:'Staff',
+  final_review:'Admin', approved:'Admin', rejected:'Admin', disbursed:'Admin'
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return ''
+  try { return new Date(dateStr).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }) }
+  catch (_) { return '' }
+}
+
+function buildTimeline(statusHistory, app) {
+  const history = [...statusHistory].sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
+  const statuses = new Set(history.map(h => h.new_status))
+  const order = ['submitted','under_review','clarification_required','documents_verified','visit_scheduled','final_review','approved','rejected','disbursed']
+
+  if (statuses.has('documents_verified') && !statuses.has('under_review')) {
+    const submitted = history.find(h => h.new_status === 'submitted')
+    if (submitted) {
+      const t = new Date(new Date(submitted.changed_at).getTime() + 60000)
+      history.push({
+        id: 'syn_ur', new_status: 'under_review', changed_at: t.toISOString(),
+        changed_by: 'Staff', changed_by_role: 'Staff',
+        remarks: 'Initial application review completed.', synthetic: true
+      })
+    }
+  }
+
+  if (statuses.has('visit_scheduled') && !statuses.has('final_review')) {
+    const laterExists = history.some(h => order.indexOf(h.new_status) > order.indexOf('visit_scheduled'))
+    if (laterExists) {
+      const visit = history.find(h => h.new_status === 'visit_scheduled')
+      if (visit) {
+        const t = new Date(new Date(visit.changed_at).getTime() + 60000)
+        history.push({
+        id: 'syn_fr', new_status: 'final_review', changed_at: t.toISOString(),
+        changed_by: 'Admin', changed_by_role: 'Admin',
+          remarks: 'Application forwarded for final admin review.', synthetic: true
+        })
+      }
+    }
+  }
+
+  return history.sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
 }
 
 export default function AdminLoanReview() {
@@ -20,8 +103,9 @@ export default function AdminLoanReview() {
   const [processing, setProcessing] = useState(false)
   const [action, setAction] = useState(null)
   const [remarks, setRemarks] = useState('')
-  const [msg, setMsg] = useState({ type:'', text:'' })
+  const [msg, setMsg] = useState({ type: '', text: '' })
   const [zoomDoc, setZoomDoc] = useState(null)
+  const [expandedSection, setExpandedSection] = useState(null)
 
   const fetchApp = useCallback(() => {
     setLoading(true)
@@ -33,26 +117,26 @@ export default function AdminLoanReview() {
 
   useEffect(() => { fetchApp() }, [fetchApp])
 
-  const showMsg = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg({ type:'', text:'' }), 5000) }
+  const showMsg = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg({ type: '', text: '' }), 5000) }
 
   const handleApprove = async () => {
     setProcessing(true)
-    try { const res = await adminApproveLoan(id); setData(res.data); showMsg('success','Loan approved and disbursed successfully!'); setAction(null) }
+    try { const res = await adminApproveLoan(id); setData(res.data); showMsg('success', 'Loan approved and disbursed successfully!'); setAction(null) }
     catch (e) { showMsg('danger', e.response?.data?.error || 'Approval failed') }
     finally { setProcessing(false) }
   }
 
   const handleReject = async () => {
-    if (!remarks.trim()) { showMsg('danger','Rejection reason is mandatory'); return }
+    if (!remarks.trim()) { showMsg('danger', 'Rejection reason is mandatory'); return }
     setProcessing(true)
-    try { const res = await adminRejectLoan(id, { reason: remarks }); setData(res.data); showMsg('success','Loan rejected'); setAction(null); setRemarks('') }
+    try { const res = await adminRejectLoan(id, { reason: remarks }); setData(res.data); showMsg('success', 'Loan rejected'); setAction(null); setRemarks('') }
     catch (e) { showMsg('danger', e.response?.data?.error || 'Failed') }
     finally { setProcessing(false) }
   }
 
   const handleReturnToStaff = async () => {
     setProcessing(true)
-    try { const res = await adminReturnToStaff(id, { reason: remarks }); setData(res.data); showMsg('success','Returned to staff for re-review'); setAction(null); setRemarks('') }
+    try { const res = await adminReturnToStaff(id, { reason: remarks }); setData(res.data); showMsg('success', 'Returned to staff for re-review'); setAction(null); setRemarks('') }
     catch (e) { showMsg('danger', e.response?.data?.error || 'Failed') }
     finally { setProcessing(false) }
   }
@@ -61,235 +145,383 @@ export default function AdminLoanReview() {
   if (!data) return <div className="empty"><span className="material-symbols-rounded">search_off</span><div>Application not found</div></div>
 
   const app = data.application || data
-  const riskLevel = app.amount > 1000000 ? 'high' : app.amount > 500000 ? 'medium' : 'low'
-  const existingLoans = (data.existing_loans||[]).filter(l => l.status === 'approved')
-  const totalExistingDebt = existingLoans.reduce((s, l) => s + l.amount, 0)
-  const monthlyIncome = data.customer?.occupation === 'Business' ? 100000 : data.customer?.occupation === 'Government' ? 80000 : 50000
-  const dti = monthlyIncome > 0 ? Math.round(((parseFloat(app.emi || 0) + (totalExistingDebt > 0 ? totalExistingDebt * 0.01 : 0)) / monthlyIncome) * 100) : 0
   const customer = data.customer || {}
+  const riskLevel = app.amount > 1000000 ? 'high' : app.amount > 500000 ? 'medium' : 'low'
+  const existingLoans = (data.existing_loans || []).filter(l => l.status === 'approved')
+  const totalExistingDebt = existingLoans.reduce((s, l) => s + l.amount, 0)
+  const monthlyIncome = customer.occupation === 'Business' ? 100000 : customer.occupation === 'Government' ? 80000 : 50000
+  const dti = monthlyIncome > 0 ? Math.round(((parseFloat(app.emi || 0) + (totalExistingDebt > 0 ? totalExistingDebt * 0.01 : 0)) / monthlyIncome) * 100) : 0
+
+  const statusHistory = app.status_history || []
+  const sortedHistory = buildTimeline(statusHistory, app)
+  const statusSet = new Set(statusHistory.map(h => h.new_status))
+
+  const toggleSection = (key) => setExpandedSection(prev => prev === key ? null : key)
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <div className="page-title">Application Review</div>
-          <div className="page-subtitle"><span className="mono">{app.application_number}</span> &mdash; {app.customer_name}</div>
-        </div>
-        <button className="btn btn-secondary" onClick={() => navigate('/admin/loan/applications')}>
-          <span className="material-symbols-rounded">arrow_back</span> Back
-        </button>
-      </div>
+      <style>{`
+        .lrr-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+        .lrr-header-left { display: flex; flex-direction: column; gap: 8px; }
+        .lrr-header-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .lrr-header-top h1 { margin: 0; font-size: 1.4rem; color: #fff; }
+        .lrr-header-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+        .lrr-header-meta span { display: flex; align-items: center; gap: 4px; }
+        .lrr-header-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+        .lrr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .lrr-info-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 20px; }
+        .lrr-info-card-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .lrr-info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); gap: 12px; }
+        .lrr-info-row:last-child { border-bottom: none; }
+        .lrr-info-label { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .lrr-info-value { font-size: 13px; color: var(--text-primary); font-weight: 600; text-align: right; }
+        .lrr-docs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .lrr-doc-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; }
+        .lrr-doc-preview { height: 160px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; }
+        .lrr-doc-preview img { width: 100%; height: 100%; object-fit: cover; }
+        .lrr-doc-preview .fallback { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
+        .lrr-doc-body { padding: 12px 14px; }
+        .lrr-doc-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .lrr-doc-meta { font-size: 11px; color: var(--text-muted); }
+        .lrr-doc-actions { display: flex; gap: 6px; margin-top: 10px; }
+        .lrr-doc-missing { height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); background: var(--bg-secondary); }
+        .lrr-timeline { display: flex; flex-direction: column; gap: 0; padding: 8px 0 4px; position: relative; }
+        .lrr-tl-item { display: flex; gap: 18px; position: relative; padding-bottom: 0; }
+        .lrr-tl-line { position: absolute; left: 17px; top: 38px; bottom: 0; width: 2px; }
+        .lrr-tl-item:last-child .lrr-tl-line { display: none; }
+        .lrr-tl-dot { position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 0; }
+        .lrr-tl-dot .mat-icon { font-size: 18px; }
+        .lrr-tl-card { flex: 1; min-width: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); transition: box-shadow 0.2s; }
+        .lrr-tl-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+        .lrr-tl-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .lrr-tl-card-header .mat-icon { font-size: 16px; }
+        .lrr-tl-card-title { font-size: 14px; font-weight: 700; }
+        .lrr-tl-card-details { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+        .lrr-tl-card-details span { display: flex; align-items: center; gap: 4px; }
+        .lrr-tl-card-details .mat-icon { font-size: 14px; color: var(--text-secondary); }
+        .lrr-tl-remark { font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.5; background: rgba(0,0,0,0.12); padding: 8px 12px; border-radius: 8px; margin-top: 4px; }
+        .lrr-tl-clarification { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.05); }
+        .lrr-tl-clarification .lrr-tl-card-title { color: #f59e0b; }
+        .lrr-tl-clarification .lrr-tl-card-header .mat-icon { color: #f59e0b; }
+        .lrr-tl-approved { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.05); }
+        .lrr-tl-approved .lrr-tl-card-title { color: #10b981; }
+        .lrr-tl-approved .lrr-tl-card-header .mat-icon { color: #10b981; }
+        .lrr-tl-rejected { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.05); }
+        .lrr-tl-rejected .lrr-tl-card-title { color: #ef4444; }
+        .lrr-tl-rejected .lrr-tl-card-header .mat-icon { color: #ef4444; }
+        .lrr-tl-activated { border-color: rgba(5,150,105,0.35); background: rgba(5,150,105,0.05); }
+        .lrr-tl-activated .lrr-tl-card-title { color: #059669; }
+        .lrr-tl-activated .lrr-tl-card-header .mat-icon { color: #059669; }
+        .lrr-tl-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .lrr-summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+        .lrr-summary-item { display: flex; flex-direction: column; gap: 4px; }
+        .lrr-summary-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .lrr-summary-value { font-size: 14px; font-weight: 700; color: #fff; }
+        .lrr-section-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; margin-bottom: 20px; }
+        .lrr-section-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; cursor: pointer; user-select: none; }
+        .lrr-section-header:hover { background: rgba(255,255,255,0.02); }
+        .lrr-section-header .mat-icon { font-size: 18px; color: var(--text-muted); transition: transform 0.2s; }
+        .lrr-section-header .mat-icon.open { transform: rotate(180deg); }
+        .lrr-section-body { padding: 0 20px 16px; }
+        .lrr-decision-bar { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 20px; margin-top: 20px; }
+        .lrr-decision-bar-inner { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+        .lrr-decision-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .lrr-decision-remarks { flex: 1; min-width: 250px; }
+        @media (max-width: 900px) { .lrr-grid { grid-template-columns: 1fr; } .lrr-docs-grid { grid-template-columns: 1fr; } .lrr-header { flex-direction: column; } .lrr-decision-bar-inner { flex-direction: column; } }
+      `}</style>
 
+      {/* FLASH MESSAGE */}
       {msg.text && <div className={`flash-message flash-${msg.type}`} style={{ marginBottom: 16 }}>{msg.text}</div>}
 
-      <div className="admin-review-layout">
-        <div className="admin-review-main">
-          <div className="card">
-            <div className="card-title">Applicant Profile</div>
-            <div className="review-item"><span>Full Name</span><span style={{ fontWeight: 600 }}>{customer.full_name || app.customer_name || '—'}</span></div>
-            <div className="review-item"><span>Phone</span><span>{customer.phone_number || app.customer_phone || '—'}</span></div>
-            <div className="review-item"><span>Email</span><span>{customer.email || app.customer_email || '—'}</span></div>
-            <div className="review-item"><span>Address</span><span>{customer.address || app.customer_address || '—'}</span></div>
-            <div className="review-item"><span>Citizenship</span><span>{customer.citizenship_id || app.citizenship_number || '—'}</span></div>
-            <div className="review-item"><span>Occupation</span><span>{customer.occupation || app.occupation || '—'}</span></div>
-            {customer.dob && <div className="review-item"><span>Date of Birth</span><span>{formatDate(customer.dob)}</span></div>}
-            {customer.gender && <div className="review-item"><span>Gender</span><span>{customer.gender}</span></div>}
-            {customer.marital_status && <div className="review-item"><span>Marital Status</span><span>{customer.marital_status}</span></div>}
-            {customer.nominee_name && <div className="review-item"><span>Nominee</span><span>{customer.nominee_name} ({customer.nominee_relationship || '—'})</span></div>}
+      {/* SECTION 1 — HEADER */}
+      <div className="lrr-header">
+        <div className="lrr-header-left">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => navigate('/admin/loan/applications')} style={{ padding: '4px 10px' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>arrow_back</span>
+            </button>
+            <h1>Loan Application Review</h1>
           </div>
-
-          <div className="card">
-            <div className="card-title">Employment & Income</div>
-            <div className="review-item"><span>Occupation</span><span>{customer.occupation || app.occupation || 'N/A'}</span></div>
-            <div className="review-item"><span>Estimated Monthly Income</span><span style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(monthlyIncome)}</span></div>
-            <div className="review-item"><span>Existing Loan EMI Burden</span><span>{formatCurrency(totalExistingDebt > 0 ? totalExistingDebt * 0.01 : 0)}/mo</span></div>
-            <div className="review-item"><span>DTI Ratio</span><span style={{ color: dti > 50 ? 'var(--danger)' : dti > 35 ? 'var(--warning)' : 'var(--success)', fontWeight: 700 }}>{dti}%</span></div>
+          <div className="lrr-header-top">
+            <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent-color)' }}>{app.application_number}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>{app.customer_name}</span>
+            <span className={`badge ${STATUS_BADGE[app.status] || 'badge-muted'}`}>{STATUS_LABEL[app.status] || app.status}</span>
+            <span className="la-prio" style={{
+              display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 5, fontSize: 10, fontWeight: 800,
+              textTransform: 'uppercase', letterSpacing: '0.4px',
+              background: riskLevel === 'high' ? 'rgba(239,68,68,0.12)' : riskLevel === 'medium' ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)',
+              color: riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981'
+            }}>{riskLevel.toUpperCase()}</span>
           </div>
-
-          <div className="card">
-            <div className="card-title">Loan Details</div>
-            <div className="review-item"><span>Loan Type</span><span>{app.loan_type}</span></div>
-            <div className="review-item"><span>Requested Amount</span><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{formatCurrency(app.amount)}</span></div>
-            <div className="review-item"><span>Interest Rate</span><span>{app.interest_rate}% per annum</span></div>
-            <div className="review-item"><span>Duration</span><span>{app.duration_months} months</span></div>
-            <div className="review-item"><span>Estimated EMI</span><span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{app.emi ? formatCurrency(app.emi) : formatCurrency(parseFloat(app.amount) * (1 + parseFloat(app.interest_rate || 12) / 100) / app.duration_months)}</span></div>
-            <div className="review-item"><span>Purpose</span><span>{app.purpose || 'N/A'}</span></div>
-            <div className="review-item"><span>Collateral</span><span>{app.collateral_type || 'None provided'}</span></div>
-            <div className="review-item"><span>Submitted</span><span>{formatDate(app.submitted_at)}</span></div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Document Gallery</div>
-            <div className="documents-gallery">
-              {Object.entries(DOC_LABELS).map(([key, label]) => {
-                const doc = (app.documents||[]).find(d => d.document_type === key)
-                return (
-                  <div key={key} className="doc-gallery-item">
-                    <div className="doc-gallery-label">{label}</div>
-                    {doc ? (
-                      <>
-                        <div className="doc-gallery-img" style={{ cursor: 'pointer' }} onClick={() => setZoomDoc(doc)}>
-                          <img src={`/${doc.file_url}`} alt={doc.file_name}
-                            style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
-                            onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }} />
-                          <div style={{ display: 'none', height: 120, alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
-                            <span className="material-symbols-rounded" style={{ fontSize: 32 }}>description</span>
-                          </div>
-                        </div>
-                        <div className="doc-gallery-actions">
-                          <button className="btn btn-sm btn-secondary" onClick={() => setZoomDoc(doc)}>
-                            <span className="material-symbols-rounded" style={{ fontSize: 14 }}>zoom_in</span> Preview
-                          </button>
-                          <a href={`/${doc.file_url}`} download className="btn btn-sm btn-secondary"
-                            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span className="material-symbols-rounded" style={{ fontSize: 14 }}>download</span>
-                          </a>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="doc-gallery-missing">
-                        <span className="material-symbols-rounded">add_circle</span>
-                        <span>Not uploaded</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Staff Verification Summary</div>
-            <div className="review-item"><span>Verified By</span><span style={{ fontWeight: 600 }}>{app.assigned_staff_name || '—'}</span></div>
-            <div className="review-item"><span>Staff Remarks</span><span>{app.staff_remark || 'No remarks'}</span></div>
-            {app.appointment_date && (
-              <div className="review-item"><span>Branch Visit</span><span>{formatDate(app.appointment_date)}{app.appointment_time ? ` at ${app.appointment_time}` : ''}</span></div>
-            )}
-            {(app.verification_notes || []).length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 8 }}>Verification Notes</div>
-                {app.verification_notes.map((vn, i) => (
-                  <div key={vn.id || i} className="review-item" style={{ padding: '6px 0' }}>
-                    <span style={{ fontSize: 12 }}>{vn.notes}{vn.staff_name ? ` — ${vn.staff_name}` : ''}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{vn.created_at ? formatDate(vn.created_at) : ''}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card">
-            <div className="card-title">Status History</div>
-            <div className="timeline-vertical">
-              {(app.status_history || []).slice().reverse().map(h => (
-                <div key={h.id} className="tlv-item">
-                  <div className="tlv-dot" style={{
-                    background: ['approved','disbursed'].includes(h.new_status) ? 'var(--success)'
-                      : h.new_status === 'rejected' ? 'var(--danger)'
-                      : h.new_status === 'clarification_required' ? 'var(--warning)'
-                      : 'var(--accent-color)'
-                  }} />
-                  <div className="tlv-content">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, fontSize: 13, textTransform: 'capitalize' }}>{h.new_status.replace(/_/g, ' ')}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.changed_at ? formatDate(h.changed_at) : ''}</span>
-                    </div>
-                    {h.remarks && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{h.remarks}</div>}
-                    {h.changed_by && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>by {h.changed_by_role || h.changed_by}</div>}
-                  </div>
-                </div>
-              ))}
-              {(!app.status_history || app.status_history.length === 0) && <div className="text-muted" style={{ padding: 8 }}>No history</div>}
-            </div>
+          <div className="lrr-header-meta">
+            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>payments</span> {app.loan_type}</span>
+            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>currency_rupee</span> {formatCurrency(app.amount)}</span>
+            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>person</span> {app.assigned_staff_name || 'Unassigned'}</span>
+            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>schedule</span> Updated {app.updated_at ? formatDate(app.updated_at) : '—'}</span>
           </div>
         </div>
-
-        <div className="admin-review-sidebar">
-          <div className="card">
-            <div className="card-title">Loan Summary</div>
-            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff' }}>{formatCurrency(app.amount)}</div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>Requested Amount</div>
-            </div>
-            <div className="review-item"><span>Interest Rate</span><span>{app.interest_rate}%</span></div>
-            <div className="review-item"><span>Duration</span><span>{app.duration_months} months</span></div>
-            <div className="review-item"><span>EMI</span><span style={{ fontWeight: 600 }}>{formatCurrency(app.emi || parseFloat(app.amount) * (1 + parseFloat(app.interest_rate || 12) / 100) / app.duration_months)}</span></div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Risk Assessment</div>
-            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{
-                fontSize: '1.8rem', fontWeight: 700,
-                color: riskLevel === 'high' ? 'var(--danger)' : riskLevel === 'medium' ? 'var(--warning)' : 'var(--success)'
-              }}>{riskLevel.toUpperCase()}</div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 8 }}>
-                <div>Amount: {formatCurrency(app.amount)}</div>
-                <div>Existing Debt: {formatCurrency(totalExistingDebt)}</div>
-                <div>Active Loans: {existingLoans.length}</div>
-                <div>DTI: {dti}%</div>
-              </div>
-            </div>
-          </div>
-
+        <div className="lrr-header-actions">
           {['visit_scheduled', 'final_review', 'documents_verified'].includes(app.status) && (
-            <div className="card" style={{ borderColor: 'var(--accent-color)' }}>
-              <div className="card-title" style={{ color: 'var(--accent-color)' }}>Admin Action Center</div>
-              <div className="action-stack">
-                <button className="btn btn-success" onClick={() => setAction('approve')} style={{ width: '100%' }}>
-                  <span className="material-symbols-rounded">check_circle</span> Approve Loan
-                </button>
-                <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }} style={{ width: '100%' }}>
-                  <span className="material-symbols-rounded">cancel</span> Reject Loan
-                </button>
-                <button className="btn btn-secondary" onClick={() => { setAction('return'); setRemarks('') }} style={{ width: '100%' }}>
-                  <span className="material-symbols-rounded">undo</span> Return to Staff
-                </button>
-              </div>
-            </div>
+            <>
+              <button className="btn btn-success" onClick={() => setAction('approve')}>
+                <span className="material-symbols-rounded">check_circle</span> Approve
+              </button>
+              <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }}>
+                <span className="material-symbols-rounded">cancel</span> Reject
+              </button>
+              <button className="btn btn-secondary" onClick={() => { setAction('return'); setRemarks('') }}>
+                <span className="material-symbols-rounded">undo</span> Clarification
+              </button>
+            </>
           )}
+          {app.status === 'approved' && <span className="badge badge-success" style={{ fontSize: 13, padding: '8px 16px' }}>Approved {app.approved_at ? formatDate(app.approved_at) : ''}</span>}
+          {app.status === 'rejected' && <span className="badge badge-danger" style={{ fontSize: 13, padding: '8px 16px' }}>Rejected {app.rejected_at ? formatDate(app.rejected_at) : ''}</span>}
+        </div>
+      </div>
 
-          {app.status === 'approved' && (
-            <div className="card" style={{ borderColor: 'var(--success)' }}>
-              <div className="card-title" style={{ color: 'var(--success)' }}>Approved</div>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Approved on {app.approved_at ? formatDate(app.approved_at) : '—'}</p>
-            </div>
-          )}
+      {/* SECTION 2 + 3 — APPLICANT OVERVIEW + LOAN INFORMATION */}
+      <div className="lrr-grid">
+        <div className="lrr-info-card">
+          <div className="lrr-info-card-title">
+            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>person</span> Applicant Overview
+          </div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>badge</span> Full Name</span><span className="lrr-info-value">{customer.full_name || app.customer_name || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>credit_card</span> Citizenship</span><span className="lrr-info-value">{customer.citizenship_id || app.citizenship_number || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>call</span> Contact</span><span className="lrr-info-value">{customer.phone_number || app.customer_phone || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>mail</span> Email</span><span className="lrr-info-value">{customer.email || app.customer_email || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>home</span> Address</span><span className="lrr-info-value">{customer.address || app.customer_address || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>work</span> Occupation</span><span className="lrr-info-value">{customer.occupation || app.occupation || '—'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>payments</span> Monthly Income</span><span className="lrr-info-value" style={{ color: 'var(--success)' }}>{formatCurrency(monthlyIncome)}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>badge</span> Employment</span><span className="lrr-info-value">{customer.occupation || app.occupation || '—'}</span></div>
+        </div>
 
-          {app.status === 'rejected' && (
-            <div className="card" style={{ borderColor: 'var(--danger)' }}>
-              <div className="card-title" style={{ color: 'var(--danger)' }}>Rejected</div>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Reason: {app.admin_remark || 'N/A'}</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Rejected on {app.rejected_at ? formatDate(app.rejected_at) : '—'}</p>
-            </div>
-          )}
+        <div className="lrr-info-card">
+          <div className="lrr-info-card-title">
+            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>request_quote</span> Loan Information
+          </div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Loan Type</span><span className="lrr-info-value">{app.loan_type}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Requested Amount</span><span className="lrr-info-value" style={{ fontSize: '1.1rem', color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Duration</span><span className="lrr-info-value">{app.duration_months} months</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Interest Rate</span><span className="lrr-info-value">{app.interest_rate}% p.a.</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Estimated EMI</span><span className="lrr-info-value" style={{ color: 'var(--accent-color)', fontWeight: 700 }}>{formatCurrency(app.emi || parseFloat(app.amount) * (1 + parseFloat(app.interest_rate || 12) / 100) / app.duration_months)}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Purpose</span><span className="lrr-info-value">{app.purpose || 'N/A'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Collateral</span><span className="lrr-info-value">{app.collateral_type || 'None'}</span></div>
+          <div className="lrr-info-row"><span className="lrr-info-label">Submitted On</span><span className="lrr-info-value">{app.submitted_at ? formatDate(app.submitted_at) : '—'}</span></div>
+        </div>
+      </div>
 
-          {['approve', 'reject', 'return'].includes(action) && (
-            <div className="card action-panel">
-              <div className="card-title" style={{ color: action === 'approve' ? 'var(--success)' : action === 'reject' ? 'var(--danger)' : 'var(--accent-color)' }}>
-                {action === 'approve' ? 'Confirm Approval' : action === 'reject' ? 'Rejection Reason' : 'Return Reason'}
+      {/* SECTION 4 — DOCUMENT REVIEW */}
+      <div className="lrr-info-card" style={{ marginBottom: 20 }}>
+        <div className="lrr-info-card-title">
+          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>description</span> Document Review
+        </div>
+        <div className="lrr-docs-grid">
+          {Object.entries(DOC_LABELS).map(([key, label]) => {
+            const doc = (app.documents || []).find(d => d.document_type === key)
+            return (
+              <div key={key} className="lrr-doc-card">
+                <div className="lrr-doc-preview" onClick={() => doc && setZoomDoc(doc)}>
+                  {doc ? (
+                    <>
+                      <img src={`/${doc.file_url}`} alt={doc.file_name}
+                        onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }} />
+                      <div className="fallback" style={{ display: 'none' }}>
+                        <span className="material-symbols-rounded" style={{ fontSize: 32 }}>description</span>
+                        <span style={{ fontSize: 11 }}>Preview unavailable</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="fallback">
+                      <span className="material-symbols-rounded" style={{ fontSize: 32, color: 'var(--text-muted)' }}>note_add</span>
+                      <span style={{ fontSize: 11 }}>Not uploaded</span>
+                    </div>
+                  )}
+                </div>
+                <div className="lrr-doc-body">
+                  <div className="lrr-doc-name">{label}</div>
+                  {doc ? (
+                    <>
+                      <div className="lrr-doc-meta">Uploaded {doc.uploaded_at ? formatDate(doc.uploaded_at) : ''}</div>
+                      <div className="lrr-doc-actions">
+                        <button className="btn btn-sm btn-secondary" onClick={() => setZoomDoc(doc)} style={{ fontSize: 11, padding: '3px 10px' }}>
+                          <span className="material-symbols-rounded" style={{ fontSize: 13 }}>zoom_in</span> Preview
+                        </button>
+                        <a href={`/${doc.file_url}`} download className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: '3px 10px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span className="material-symbols-rounded" style={{ fontSize: 13 }}>open_in_new</span> Open
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="lrr-doc-meta" style={{ color: 'var(--text-muted)' }}>Not uploaded yet</div>
+                  )}
+                </div>
               </div>
-              {action !== 'approve' && (
-                <textarea className="form-control" rows={3}
-                  placeholder={action === 'reject' ? 'Rejection reason (required)' : 'Reason for returning to staff'}
-                  value={remarks} onChange={e => setRemarks(e.target.value)} style={{ marginBottom: 12 }} />
-              )}
-              {action === 'approve' && (
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>This will approve the loan, create the loan account, generate repayment schedule, and disburse funds to the customer's account.</p>
-              )}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-sm btn-secondary" onClick={() => { setAction(null); setRemarks('') }} style={{ flex: 1 }}>Cancel</button>
-                <button className={`btn btn-sm ${action === 'approve' ? 'btn-success' : action === 'reject' ? 'btn-danger' : 'btn-primary'}`}
-                  onClick={action === 'approve' ? handleApprove : action === 'reject' ? handleReject : handleReturnToStaff}
-                  disabled={processing || (action !== 'approve' && !remarks.trim())} style={{ flex: 1 }}>
-                  {processing ? 'Processing...' : 'Confirm'}
-                </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* SECTION 5 — APPLICATION DETAILS (Expandable) */}
+      <div className="lrr-section-card">
+        <div className="lrr-section-header" onClick={() => toggleSection('details')}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>description</span> Application Details
+          </span>
+          <span className={`material-symbols-rounded ${expandedSection === 'details' ? 'open' : ''}`}>expand_more</span>
+        </div>
+        {expandedSection === 'details' && (
+          <div className="lrr-section-body">
+            {app.description && <div className="lrr-info-row"><span className="lrr-info-label">Additional Notes</span><span className="lrr-info-value">{app.description}</span></div>}
+            {customer.dob && <div className="lrr-info-row"><span className="lrr-info-label">Date of Birth</span><span className="lrr-info-value">{formatDate(customer.dob)}</span></div>}
+            {customer.gender && <div className="lrr-info-row"><span className="lrr-info-label">Gender</span><span className="lrr-info-value">{customer.gender}</span></div>}
+            {customer.marital_status && <div className="lrr-info-row"><span className="lrr-info-label">Marital Status</span><span className="lrr-info-value">{customer.marital_status}</span></div>}
+            {customer.nominee_name && <div className="lrr-info-row"><span className="lrr-info-label">Nominee</span><span className="lrr-info-value">{customer.nominee_name} ({customer.nominee_relationship || '—'})</span></div>}
+            {customer.education && <div className="lrr-info-row"><span className="lrr-info-label">Education</span><span className="lrr-info-value">{customer.education}</span></div>}
+            {app.created_at && <div className="lrr-info-row"><span className="lrr-info-label">Application Created</span><span className="lrr-info-value">{formatDateTime(app.created_at)}</span></div>}
+            {app.submitted_at && <div className="lrr-info-row"><span className="lrr-info-label">Submitted On</span><span className="lrr-info-value">{formatDateTime(app.submitted_at)}</span></div>}
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 6 — LOAN TIMELINE */}
+      <div className="lrr-info-card" style={{ marginBottom: 20 }}>
+        <div className="lrr-info-card-title">
+          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>timeline</span> Loan Timeline
+        </div>
+        <div className="lrr-timeline">
+          {sortedHistory.length > 0 ? sortedHistory.map((h, i) => {
+            const color = TIMELINE_COLORS[h.new_status] || '#6b7280'
+            const icon = TIMELINE_ICONS[h.new_status] || 'circle'
+            const isClarification = h.new_status === 'clarification_required'
+            const isApproved = h.new_status === 'approved'
+            const isRejected = h.new_status === 'rejected'
+            const isActivated = h.new_status === 'disbursed'
+            let cardClass = 'lrr-tl-card'
+            if (isClarification) cardClass += ' lrr-tl-clarification'
+            else if (isApproved) cardClass += ' lrr-tl-approved'
+            else if (isRejected) cardClass += ' lrr-tl-rejected'
+            else if (isActivated) cardClass += ' lrr-tl-activated'
+            const isLast = i === sortedHistory.length - 1
+            const expectedRole = STATUS_ROLE[h.new_status] || ''
+            const actualRole = h.changed_by_role || ''
+            const role = expectedRole || actualRole
+            const rawName = (h.changed_by || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+            const crossPortal = /^(?:User|Staff|Admin)$/i.test(rawName)
+            const cleanName = (expectedRole && expectedRole === actualRole && !crossPortal) ? rawName : role
+            return (
+              <div key={h.id || i} className="lrr-tl-item">
+                <div className="lrr-tl-dot" style={{ background: `${color}1a`, color, border: `2px solid ${color}` }}>
+                  <span className="material-symbols-rounded mat-icon">{icon}</span>
+                </div>
+                {!isLast && <div className="lrr-tl-line" style={{ background: color }} />}
+                <div className={cardClass}>
+                  <div className="lrr-tl-card-header">
+                    <span className="material-symbols-rounded mat-icon">{icon}</span>
+                    <span className="lrr-tl-card-title">{STATUS_LABEL[h.new_status] || h.new_status.replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="lrr-tl-card-details">
+                    <span>
+                      <span className="material-symbols-rounded" style={{ fontSize: 14 }}>calendar_today</span>
+                      {formatDate(h.changed_at)}
+                    </span>
+                    <span>
+                      <span className="material-symbols-rounded" style={{ fontSize: 14 }}>schedule</span>
+                      {formatTime(h.changed_at)}
+                    </span>
+                    {h.changed_by && (
+                      <span>
+                        <span className="material-symbols-rounded" style={{ fontSize: 14 }}>person</span>
+                        {role && <span>By {role}<br /></span>}
+                        {cleanName}
+                      </span>
+                    )}
+                  </div>
+                  {h.remarks && <div className="lrr-tl-remark">{h.remarks}</div>}
+                </div>
               </div>
+            )
+          }) : (
+            <div className="lrr-tl-empty">
+              <span className="material-symbols-rounded" style={{ fontSize: 32, display: 'block', marginBottom: 8 }}>timeline</span>
+              No activity recorded yet
             </div>
           )}
         </div>
       </div>
 
+      {/* SECTION 7 — REVIEW SUMMARY */}
+      <div className="lrr-info-card" style={{ marginBottom: 20 }}>
+        <div className="lrr-info-card-title">
+          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>summarize</span> Review Summary
+        </div>
+        <div className="lrr-summary-grid">
+          <div className="lrr-summary-item"><span className="lrr-summary-label">Documents Submitted</span><span className="lrr-summary-value">{(app.documents || []).filter(d => DOC_LABELS[d.document_type]).length} / 3</span></div>
+          <div className="lrr-summary-item"><span className="lrr-summary-label">Staff Verification</span><span className="lrr-summary-value">{app.assigned_staff_name || 'Pending'}</span></div>
+          <div className="lrr-summary-item"><span className="lrr-summary-label">Status</span><span><span className={`badge ${STATUS_BADGE[app.status] || 'badge-muted'}`}>{STATUS_LABEL[app.status] || app.status}</span></span></div>
+          <div className="lrr-summary-item"><span className="lrr-summary-label">DTI Ratio</span><span className="lrr-summary-value" style={{ color: dti > 50 ? 'var(--danger)' : dti > 35 ? 'var(--warning)' : 'var(--success)' }}>{dti}%</span></div>
+          <div className="lrr-summary-item"><span className="lrr-summary-label">Risk Level</span><span className="lrr-summary-value" style={{ color: riskLevel === 'high' ? 'var(--danger)' : riskLevel === 'medium' ? 'var(--warning)' : 'var(--success)' }}>{riskLevel.toUpperCase()}</span></div>
+          <div className="lrr-summary-item"><span className="lrr-summary-label">Existing Debt</span><span className="lrr-summary-value">{formatCurrency(totalExistingDebt)}</span></div>
+        </div>
+      </div>
+
+      {/* SECTION 8 — ADMIN DECISION PANEL */}
+      <div className="lrr-decision-bar">
+        <div className="lrr-decision-bar-inner">
+          <div className="lrr-decision-remarks">
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Decision Remarks</div>
+            <textarea className="form-control" rows={2} placeholder="Add internal remarks or notes..."
+              value={remarks} onChange={e => setRemarks(e.target.value)} style={{ fontSize: 13 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Actions</div>
+            <div className="lrr-decision-actions">
+              {['visit_scheduled', 'final_review', 'documents_verified'].includes(app.status) ? (
+                <>
+                  <button className="btn btn-success" onClick={() => setAction('approve')} disabled={processing}>
+                    <span className="material-symbols-rounded">check_circle</span> Approve Loan
+                  </button>
+                  <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }} disabled={processing}>
+                    <span className="material-symbols-rounded">cancel</span> Reject Loan
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setAction('return'); setRemarks('') }} disabled={processing}>
+                    <span className="material-symbols-rounded">undo</span> Request Clarification
+                  </button>
+                </>
+              ) : (
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No actions available for current status</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CONFIRMATION PANEL */}
+      {['approve', 'reject', 'return'].includes(action) && (
+        <div className="lrr-decision-bar" style={{ borderColor: action === 'approve' ? 'var(--success)' : action === 'reject' ? 'var(--danger)' : 'var(--accent-color)', marginTop: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: action === 'approve' ? 'var(--success)' : action === 'reject' ? 'var(--danger)' : 'var(--accent-color)', marginBottom: 4 }}>
+                {action === 'approve' ? 'Confirm Loan Approval' : action === 'reject' ? 'Confirm Rejection' : 'Return to Staff'}
+              </div>
+              {action === 'approve' ? (
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>This will approve the loan, create the loan account, generate repayment schedule, and disburse funds to the customer's account.</p>
+              ) : (
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{action === 'reject' ? 'Rejection reason is required.' : 'Provide a reason for returning to staff.'}</p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => { setAction(null); setRemarks('') }} disabled={processing}>Cancel</button>
+              <button className={`btn btn-sm ${action === 'approve' ? 'btn-success' : action === 'reject' ? 'btn-danger' : 'btn-primary'}`}
+                onClick={action === 'approve' ? handleApprove : action === 'reject' ? handleReject : handleReturnToStaff}
+                disabled={processing || (action !== 'approve' && !remarks.trim())}>
+                {processing ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DOCUMENT ZOOM MODAL */}
       {zoomDoc && (
         <div className="modal-overlay" onClick={() => setZoomDoc(null)} style={{ zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0 }}>
           <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'transparent' }}>

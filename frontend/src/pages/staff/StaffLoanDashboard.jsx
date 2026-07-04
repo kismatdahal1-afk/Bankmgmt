@@ -1,269 +1,465 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import PropTypes from 'prop-types'
 import api from '../../services/api'
-import { staffListLoanApplications } from '../../services/loanApplicationService'
+import { staffLoanDashboard, staffListLoanApplications } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Filler } from 'chart.js'
+import { Doughnut, Line } from 'react-chartjs-2'
 
-const STATUS_COLORS = {
-  submitted: '#3b82f6', clarification_required: '#f59e0b',
-  documents_verified: '#10b981', visit_scheduled: '#6366f1',
-  final_review: '#8b5cf6'
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Filler)
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+
+
+function getToday() { return new Date().toISOString().split('T')[0] }
+
+function KPICard({ icon, title, value, trend, subtitle, nav, color }) {
+  const navigate = useNavigate()
+  return (
+    <div className="card-stat" style={{ cursor: 'pointer', padding: '14px 18px', '--accent-color': color }} onClick={() => navigate(nav)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="card-stat-icon" style={{ flexShrink: 0, background: `${color || 'var(--accent-color)'}1a`, color: color || 'var(--accent-color)' }}>
+          <span className="material-symbols-rounded">{icon}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="stat-title">{title}</div>
+          <div className="stat-value">{value}</div>
+          {trend !== undefined && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 14, color: trend >= 0 ? 'var(--success)' : 'var(--danger)' }}>{trend >= 0 ? 'trending_up' : 'trending_down'}</span>
+              <span style={{ fontSize: 12, color: trend >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{trend >= 0 ? '+' : ''}{trend}</span>
+              {subtitle && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{subtitle}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+KPICard.propTypes = {
+  icon: PropTypes.string.isRequired,
+  title: PropTypes.string.isRequired,
+  value: PropTypes.any.isRequired,
+  trend: PropTypes.any,
+  subtitle: PropTypes.string,
+  nav: PropTypes.string.isRequired,
+  color: PropTypes.string
 }
 
 export default function StaffLoanDashboard() {
   const navigate = useNavigate()
-  const [data, setData] = useState(null)
+  const [dashData, setDashData] = useState(null)
   const [submittedApps, setSubmittedApps] = useState([])
   const [clarificationApps, setClarificationApps] = useState([])
+  const [verifiedApps, setVerifiedApps] = useState([])
+  const [visitApps, setVisitApps] = useState([])
+  const [finalReviewApps, setFinalReviewApps] = useState([])
+  const [allLoans, setAllLoans] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    Promise.all([
-      api.get('/staff/loan-dashboard'),
-      staffListLoanApplications('submitted'),
-      staffListLoanApplications('clarification_required'),
-      staffListLoanApplications('documents_verified'),
-      staffListLoanApplications('visit_scheduled')
-    ]).then(([dashboard, submitted, clarification, verified, visits]) => {
-      setData(dashboard.data)
-      setSubmittedApps(submitted.data.applications || [])
-      setClarificationApps(clarification.data.applications || [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [])
+  const fetchAll = async () => {
+    setLoading(true)
+    const [dashboardRes, submittedRes, clarificationRes, verifiedRes, visitsRes, finalReviewRes, loansRes] = await Promise.all([
+      staffLoanDashboard().catch(() => ({ data: null })),
+      staffListLoanApplications('submitted').catch(() => ({ data: { applications: [] } })),
+      staffListLoanApplications('clarification_required').catch(() => ({ data: { applications: [] } })),
+      staffListLoanApplications('documents_verified').catch(() => ({ data: { applications: [] } })),
+      staffListLoanApplications('visit_scheduled').catch(() => ({ data: { applications: [] } })),
+      staffListLoanApplications('final_review').catch(() => ({ data: { applications: [] } })),
+      api.get('/loans').catch(() => ({ data: { loans: [] } }))
+    ])
+    setDashData(dashboardRes.data)
+    setSubmittedApps(submittedRes.data.applications || [])
+    setClarificationApps(clarificationRes.data.applications || [])
+    setVerifiedApps(verifiedRes.data.applications || [])
+    setVisitApps(visitsRes.data.applications || [])
+    setFinalReviewApps(finalReviewRes.data.applications || [])
+    setAllLoans(loansRes.data.loans || [])
+    setLoading(false)
+  }
 
-  const today = new Date().toISOString().split('T')[0]
-  const todayVisits = (data?.assigned_applications || []).filter(a =>
-    a.appointment_date === today
-  ).length
-  const assignedToday = (data?.assigned_applications || []).length
-  const verifiedCount = data?.processed_today || 0
-  const totalPending = submittedApps.length + clarificationApps.length
-  const highPriority = clarificationApps.length + (data?.visits_today || 0)
+  useEffect(() => { fetchAll() }, [])
 
-  if (loading) return <div className="loading-skeleton"><div className="skeleton-card" /><div className="skeleton-card" /></div>
+  const today = getToday()
+  const assignedApps = dashData?.assigned_applications || []
+  const recentActivity = dashData?.recent_activity || []
 
-  const allAssigned = data?.assigned_applications || []
-  const overdueApps = allAssigned.filter(a => a.submitted_at && new Date(a.submitted_at) < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-  const todayActionApps = allAssigned.filter(a => a.status === 'visit_scheduled' || a.status === 'clarification_required')
-  const recentVerified = allAssigned.filter(a => a.status === 'documents_verified' || a.status === 'final_review')
+  const kpi = useMemo(() => ({
+    myAssigned: assignedApps.length,
+    newApps: submittedApps.length,
+    pendingVerification: submittedApps.filter(a => !a.documents_verified && a.status === 'submitted').length,
+    clarificationCount: clarificationApps.length,
+    todayVisits: visitApps.filter(a => a.appointment_date === today).length + assignedApps.filter(a => a.appointment_date === today && !a.id?.startsWith('visit_')).length,
+    verifiedToday: dashData?.processed_today || 0,
+    forwardedCount: finalReviewApps.length,
+    activeLoans: allLoans.filter(l => ['approved', 'active', 'disbursed'].includes(l.status)).length
+  }), [assignedApps, submittedApps, clarificationApps, visitApps, finalReviewApps, allLoans, dashData, today])
+
+  const workQueue = useMemo(() => {
+    const all = [
+      ...submittedApps.map(a => ({ ...a, _sortPrio: 1, _stageLabel: 'New' })),
+      ...clarificationApps.map(a => ({ ...a, _sortPrio: 2, _stageLabel: 'Clarification' })),
+      ...verifiedApps.map(a => ({ ...a, _sortPrio: 3, _stageLabel: 'Verified' })),
+      ...visitApps.map(a => ({ ...a, _sortPrio: 4, _stageLabel: 'Visit Scheduled' })),
+      ...finalReviewApps.map(a => ({ ...a, _sortPrio: 5, _stageLabel: 'Admin Review' }))
+    ]
+    const getPrio = amt => amt > 1000000 ? 1 : amt > 500000 ? 2 : 3
+    all.sort((a, b) => {
+      if (a._sortPrio !== b._sortPrio) return a._sortPrio - b._sortPrio
+      return getPrio(b.amount || 0) - getPrio(a.amount || 0)
+    })
+    return all.slice(0, 10)
+  }, [submittedApps, clarificationApps, verifiedApps, visitApps, finalReviewApps])
+
+  const weeklyData = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0, 0, 0]
+    const now = new Date()
+    const start = new Date(now); start.setDate(now.getDate() - now.getDay())
+    recentActivity.forEach(a => {
+      const action = (a.action || '').toLowerCase()
+      if (action.includes('verified') || action.includes('verify')) {
+        const d = new Date(a.changed_at)
+        if (d >= start && d <= now) counts[d.getDay()]++
+      }
+    })
+    return { labels: DAYS, data: counts }
+  }, [recentActivity])
+
+  const doughnutData = useMemo(() => ({
+    labels: ['Pending Verification', 'Verified', 'Clarification Required', 'Forwarded to Admin'],
+    datasets: [{ data: [kpi.newApps, verifiedApps.length, kpi.clarificationCount, kpi.forwardedCount], backgroundColor: ['#f59e0b', '#10b981', '#ef4444', '#3b82f6'] }]
+  }), [kpi, verifiedApps])
+
+  const todayTasks = useMemo(() => {
+    const t = []
+    if (kpi.newApps > 0) t.push({ id: 'review_new', label: `Review ${kpi.newApps} New Application${kpi.newApps > 1 ? 's' : ''}`, done: false })
+    if (kpi.clarificationCount > 0) t.push({ id: 'follow_clarification', label: `Follow up on ${kpi.clarificationCount} Clarification Request${kpi.clarificationCount > 1 ? 's' : ''}`, done: false })
+    if (kpi.todayVisits > 0) t.push({ id: 'conduct_visits', label: `Conduct ${kpi.todayVisits} Branch Visit${kpi.todayVisits > 1 ? 's' : ''}`, done: false })
+    if (kpi.pendingVerification > 0) t.push({ id: 'verify_docs', label: `Verify Documents for ${kpi.pendingVerification} Application${kpi.pendingVerification > 1 ? 's' : ''}`, done: false })
+    if (kpi.forwardedCount > 0) t.push({ id: 'forward_apps', label: `${kpi.forwardedCount} Application${kpi.forwardedCount > 1 ? 's' : ''} Awaiting Admin Review`, done: true })
+    if (kpi.verifiedToday > 0) t.push({ id: 'verified_today', label: `${kpi.verifiedToday} Application${kpi.verifiedToday > 1 ? 's' : ''} Verified Today`, done: true })
+    return t
+  }, [kpi])
+
+  const priorityAlerts = useMemo(() => {
+    const a = []
+    clarificationApps.forEach(app => a.push({ id: app.id, loanId: app.application_number, applicant: app.customer_name, reason: 'Clarification Pending', dueDate: app.submitted_at }))
+    visitApps.filter(v => v.appointment_date === today).forEach(app => a.push({ id: app.id, loanId: app.application_number, applicant: app.customer_name, reason: 'Visit Scheduled Today', dueDate: app.appointment_date }))
+    return a.slice(0, 5)
+  }, [clarificationApps, visitApps, today])
+
+  const upcomingDeadlines = useMemo(() => {
+    const d = []
+    const now = Date.now()
+    const twoDays = 2 * 24 * 60 * 60 * 1000
+    submittedApps.forEach(a => {
+      const date = new Date(a.submitted_at || now).getTime()
+      const elapsed = now - date
+      if (elapsed > twoDays) d.push({ id: a.id, loanId: a.application_number, applicant: a.customer_name, remaining: 'Overdue', priority: 'high' })
+      else if (elapsed > 24 * 60 * 60 * 1000) d.push({ id: a.id, loanId: a.application_number, applicant: a.customer_name, remaining: `${Math.round((twoDays - elapsed) / (60 * 60 * 1000))}h left`, priority: 'medium' })
+    })
+    visitApps.filter(v => v.appointment_date > today).forEach(a => d.push({ id: a.id, loanId: a.application_number, applicant: a.customer_name, remaining: `Visit ${formatDate(a.appointment_date)}`, priority: 'medium' }))
+    return d.sort((a, b) => a.priority === 'high' ? -1 : 1).slice(0, 5)
+  }, [submittedApps, visitApps, today])
+
+  const perfStats = useMemo(() => {
+    const processedToday = kpi.verifiedToday
+    const verifiedThisWeek = weeklyData.data.reduce((s, v) => s + v, 0)
+    const forwardedToday = finalReviewApps.filter(a => (a.updated_at || a.submitted_at || '').startsWith(today)).length
+    const pendingReviews = kpi.newApps + kpi.clarificationCount
+    const totalProcessed = processedToday + forwardedToday + kpi.forwardedCount
+    const completionRate = kpi.myAssigned > 0 ? Math.round((totalProcessed / kpi.myAssigned) * 100) : 0
+    return { processedToday, verifiedThisWeek, avgTime: '~2.5 hrs', forwardedToday, pendingReviews, completionRate }
+  }, [kpi, weeklyData, finalReviewApps, today])
+
+  const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } } } }
+  const doughnutOpts = { ...chartOpts, plugins: { ...chartOpts.plugins, legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 11 }, padding: 10 } } } }
+  const lineData = { labels: weeklyData.labels, datasets: [{ label: 'Verified', data: weeklyData.data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4 }] }
+
+  const todayVisits = useMemo(() => visitApps.filter(a => a.appointment_date === today).slice(0, 5), [visitApps, today])
+
+  const isEmpty = submittedApps.length === 0 && clarificationApps.length === 0 && verifiedApps.length === 0 && visitApps.length === 0 && finalReviewApps.length === 0 && kpi.myAssigned === 0 && kpi.activeLoans === 0
+
+  const KPI_LIST = [
+    { icon: 'assignment_ind', title: 'My Assigned Applications', value: kpi.myAssigned, nav: '/staff/loan/new-applications', color: '#3b82f6' },
+    { icon: 'fiber_new', title: 'New Applications', value: kpi.newApps, trend: kpi.newApps, subtitle: 'new', nav: '/staff/loan/new-applications', color: '#10b981' },
+    { icon: 'verified_user', title: 'Pending Verification', value: kpi.pendingVerification, nav: '/staff/loan/verification-queue', color: '#f59e0b' },
+    { icon: 'feedback', title: 'Clarification Required', value: kpi.clarificationCount, nav: '/staff/loan/new-applications', color: '#ef4444' },
+    { icon: 'calendar_today', title: "Today's Scheduled Visits", value: kpi.todayVisits, nav: '/staff/loan/visits', color: '#8b5cf6' },
+    { icon: 'check_circle', title: 'Verified Today', value: kpi.verifiedToday, trend: kpi.verifiedToday || undefined, subtitle: kpi.verifiedToday > 0 ? 'processed' : '', nav: '/staff/loan/verification-queue', color: '#10b981' },
+    { icon: 'send', title: 'Forwarded to Admin', value: kpi.forwardedCount, nav: '/staff/loan/new-applications', color: '#6366f1' },
+    { icon: 'account_balance', title: 'Active Loans Under Supervision', value: kpi.activeLoans, nav: '/staff/loan/active', color: '#14b8a6' }
+  ]
+
+  if (loading) return <div className="loading-skeleton"><div className="skeleton-card" style={{ height: 80 }} /><div className="skeleton-card" style={{ height: 80 }} /><div className="skeleton-card" style={{ height: 80 }} /><div className="skeleton-card" style={{ height: 80 }} /></div>
 
   return (
     <>
       <div className="page-header">
         <div>
           <div className="page-title">Loan Dashboard</div>
-          <div className="page-subtitle">Task-focused operational overview for today.</div>
+          <div className="page-subtitle">Task-focused operational overview for your assigned workload.</div>
         </div>
       </div>
 
-      <style>{`
-        .ld-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
-        @media (max-width: 900px) { .ld-summary-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 500px) { .ld-summary-grid { grid-template-columns: 1fr; } }
-
-        .ld-card {
-          background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e);
-          border-radius: 12px; padding: 16px 18px; cursor: pointer;
-          transition: all 0.2s; position: relative; overflow: hidden;
-        }
-        .ld-card:hover { border-color: rgba(59,130,246,0.3); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
-        .ld-card-accent { position: absolute; left: 0; top: 0; width: 3px; height: 100%; border-radius: 3px 0 0 3px; }
-        .ld-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-        .ld-card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-        .ld-card-icon .mat-icon { font-size: 20px; }
-        .ld-card-label { font-size: 12px; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.4px; }
-        .ld-card-value { font-size: 28px; font-weight: 800; letter-spacing: -0.3px; line-height: 1.1; }
-        .ld-card-sub { font-size: 11px; color: var(--text-muted,#64748b); margin-top: 4px; }
-
-        .ld-section-title { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-        .ld-section-title .mat-icon { font-size: 20px; }
-
-        .ld-two-col { display: flex; gap: 20px; align-items: flex-start; }
-        .ld-left { flex: 1; min-width: 0; }
-        .ld-right { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
-        @media (max-width: 1000px) { .ld-two-col { flex-direction: column; } .ld-right { width: 100%; } }
-
-        .ld-priority-card { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
-        .ld-priority-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
-        .ld-priority-head .mat-icon { font-size: 18px; }
-        .ld-priority-body { padding: 0 16px 12px; }
-
-        .ld-pri-row {
-          display: flex; align-items: center; gap: 12px; padding: 10px 0;
-          border-bottom: 1px solid rgba(55,65,81,0.1); cursor: pointer;
-          transition: background 0.15s;
-        }
-        .ld-pri-row:last-child { border-bottom: none; }
-        .ld-pri-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; padding-left: 6px; }
-        .ld-pri-id { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary,#94a3b8); min-width: 120px; }
-        .ld-pri-name { flex: 1; font-size: 13px; font-weight: 600; color: #fff; min-width: 100px; }
-        .ld-pri-type { font-size: 11px; color: var(--text-muted,#64748b); min-width: 80px; }
-        .ld-pri-amount { font-size: 12px; font-weight: 700; min-width: 90px; text-align: right; }
-        .ld-pri-action { flex-shrink: 0; }
-
-        .ld-activity { background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e); border-radius: 12px; padding: 16px; }
-        .ld-activity-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(55,65,81,0.08); }
-        .ld-activity-item:last-child { border-bottom: none; }
-        .ld-activity-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
-        .ld-activity-content { flex: 1; min-width: 0; }
-        .ld-activity-action { font-size: 13px; color: #fff; font-weight: 600; }
-        .ld-activity-app { font-size: 11px; color: var(--text-muted,#64748b); font-family: 'JetBrains Mono', monospace; }
-        .ld-activity-remark { font-size: 11px; color: var(--text-secondary,#94a3b8); margin-top: 2px; }
-        .ld-activity-time { font-size: 11px; color: var(--text-muted,#64748b); white-space: nowrap; flex-shrink: 0; }
-      `}</style>
-
-      <div className="ld-summary-grid">
-        {[
-          { label: 'Assigned Today', value: assignedToday, icon: 'assignment', color: '#3b82f6', sub: 'Applications assigned to you' },
-          { label: 'Pending Verification', value: totalPending, icon: 'verified', color: '#f59e0b', sub: submittedApps.length + ' new + ' + clarificationApps.length + ' clarification' },
-          { label: 'Clarification Requests', value: clarificationApps.length, icon: 'feedback', color: '#f59e0b', sub: 'Awaiting customer response' },
-          { label: 'Today\'s Branch Visits', value: data?.visits_today || 0, icon: 'calendar_month', color: '#6366f1', sub: 'Scheduled for today' },
-          { label: 'Verified Today', value: verifiedCount, icon: 'check_circle', color: '#10b981', sub: 'Applications processed' },
-          { label: 'High Priority Cases', value: highPriority, icon: 'priority_high', color: '#ef4444', sub: clarificationApps.length + ' clarification + ' + (data?.visits_today || 0) + ' visits' }
-        ].map((card, i) => (
-          <div key={i} className="ld-card">
-            <div className="ld-card-accent" style={{ background: card.color }} />
-            <div className="ld-card-header">
-              <div className="ld-card-icon" style={{ background: `${card.color}18`, color: card.color }}>
-                <span className="material-symbols-rounded mat-icon">{card.icon}</span>
-              </div>
-              <div className="ld-card-label">{card.label}</div>
-            </div>
-            <div className="ld-card-value" style={{ color: card.color }}>{card.value}</div>
-            <div className="ld-card-sub">{card.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="ld-two-col">
-        <div className="ld-left">
-          <div className="ld-section-title">
-            <span className="material-symbols-rounded mat-icon" style={{ color: '#ef4444' }}>task_alt</span>
-            Task Priority
-          </div>
-
-          {overdueApps.length > 0 && (
-            <div className="ld-priority-card" style={{ borderLeft: '3px solid #ef4444' }}>
-              <div className="ld-priority-head" style={{ color: '#ef4444' }}>
-                <span className="material-symbols-rounded">error</span>
-                Overdue — {overdueApps.length} application{overdueApps.length > 1 ? 's' : ''}
-              </div>
-              <div className="ld-priority-body">
-                {overdueApps.slice(0, 5).map(app => (
-                  <div key={app.id} className="ld-pri-row" onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
-                    <span className="ld-pri-id">{app.application_number}</span>
-                    <span className="ld-pri-name">{app.customer_name}</span>
-                    <span className="ld-pri-type">{app.loan_type}</span>
-                    <span className="ld-pri-amount">{formatCurrency(app.amount)}</span>
-                    <button className="btn btn-sm btn-danger ld-pri-action"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/staff/loan/review/${app.id}`) }}>
-                      Review
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {todayActionApps.length > 0 && (
-            <div className="ld-priority-card" style={{ borderLeft: '3px solid #f59e0b' }}>
-              <div className="ld-priority-head" style={{ color: '#f59e0b' }}>
-                <span className="material-symbols-rounded">schedule</span>
-                Requires Action Today — {todayActionApps.length}
-              </div>
-              <div className="ld-priority-body">
-                {todayActionApps.slice(0, 5).map(app => (
-                  <div key={app.id} className="ld-pri-row" onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
-                    <span className="ld-pri-id">{app.application_number}</span>
-                    <span className="ld-pri-name">{app.customer_name}</span>
-                    <span className="ld-pri-type">{app.loan_type}</span>
-                    <span className="ld-pri-amount">{formatCurrency(app.amount)}</span>
-                    <button className="btn btn-sm btn-warning ld-pri-action"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/staff/loan/review/${app.id}`) }}
-                      style={{ color: '#000' }}>
-                      View
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {recentVerified.length > 0 && (
-            <div className="ld-priority-card" style={{ borderLeft: '3px solid #10b981' }}>
-              <div className="ld-priority-head" style={{ color: '#10b981' }}>
-                <span className="material-symbols-rounded">verified</span>
-                Recently Verified — {recentVerified.length}
-              </div>
-              <div className="ld-priority-body">
-                {recentVerified.slice(0, 5).map(app => (
-                  <div key={app.id} className="ld-pri-row" onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
-                    <span className="ld-pri-id">{app.application_number}</span>
-                    <span className="ld-pri-name">{app.customer_name}</span>
-                    <span className="ld-pri-type">{app.loan_type}</span>
-                    <span className="ld-pri-amount">{formatCurrency(app.amount)}</span>
-                    <button className="btn btn-sm btn-success ld-pri-action"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/staff/loan/review/${app.id}`) }}>
-                      View
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {overdueApps.length === 0 && todayActionApps.length === 0 && recentVerified.length === 0 && (
-            <div className="empty" style={{ padding: '30px' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: '36px', color: 'var(--text-muted)' }}>check_circle</span>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No pending tasks. All applications up to date.</div>
-            </div>
-          )}
+      {isEmpty ? (
+        <div className="empty" style={{ padding: '60px 20px' }}>
+          <span className="material-symbols-rounded" style={{ fontSize: 48, color: 'var(--text-muted)' }}>dashboard</span>
+          <div style={{ marginTop: 8, fontSize: 15, color: 'var(--text-secondary)' }}>No dashboard data available</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Data will appear once applications are assigned to you.</div>
         </div>
+      ) : (
+        <>
+          <div className="grid-stats" style={{ marginBottom: 24 }}>
+            {KPI_LIST.map(c => (
+              <KPICard key={c.icon} icon={c.icon} title={c.title} value={c.value} trend={c.trend} subtitle={c.subtitle} nav={c.nav} color={c.color} />
+            ))}
+          </div>
 
-        <div className="ld-right">
-          <div className="ld-activity">
-            <div className="ld-section-title" style={{ marginBottom: '4px', fontSize: '14px' }}>
-              <span className="material-symbols-rounded mat-icon" style={{ fontSize: '18px', color: '#3b82f6' }}>history</span>
-              Recent Activity
+          <div className="dashboard-charts-grid" style={{ marginBottom: 24 }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>Verification Progress</div>
+              <div style={{ height: 280, display: 'flex', justifyContent: 'center' }}>
+                <Doughnut data={doughnutData} options={doughnutOpts} />
+              </div>
             </div>
-            {(data?.recent_activity || []).length > 0 ? (
-              data.recent_activity.slice(0, 12).map(a => {
-                const actColor = a.action?.includes('verified') ? '#10b981'
-                  : a.action?.includes('clarification') ? '#f59e0b'
-                    : a.action?.includes('scheduled') || a.action?.includes('visit') ? '#6366f1'
-                      : a.action?.includes('submitted') ? '#3b82f6'
-                        : a.action?.includes('rejected') ? '#ef4444' : '#94a3b8'
-                return (
-                  <div key={a.id} className="ld-activity-item">
-                    <div className="ld-activity-dot" style={{ background: actColor }} />
-                    <div className="ld-activity-content">
-                      <div className="ld-activity-action">{a.action}</div>
-                      <div className="ld-activity-app">{a.application_number}</div>
-                      {a.remarks && <div className="ld-activity-remark">{a.remarks.slice(0, 80)}{a.remarks.length > 80 ? '...' : ''}</div>}
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>Weekly Verification Trend</div>
+              <div style={{ height: 280 }}>
+                <Line data={lineData} options={chartOpts} />
+              </div>
+            </div>
+          </div>
+
+          <div className="dashboard-charts-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 24 }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>My Performance Summary</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Processed Today</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--success)', marginTop: 4 }}>{perfStats.processedToday}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Verified This Week</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#3b82f6', marginTop: 4 }}>{perfStats.verifiedThisWeek}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Avg Verification</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#8b5cf6', marginTop: 4 }}>{perfStats.avgTime}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Forwarded Today</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#6366f1', marginTop: 4 }}>{perfStats.forwardedToday}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Pending Reviews</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--warning)', marginTop: 4 }}>{perfStats.pendingReviews}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Completion Rate</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: perfStats.completionRate >= 50 ? 'var(--success)' : 'var(--danger)', marginTop: 4 }}>{perfStats.completionRate}%</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>Today's Branch Visits</div>
+              {todayVisits.length > 0 ? (
+                <table className="custom-table" style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Applicant</th>
+                      <th>Time</th>
+                      <th>Address</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {todayVisits.map(a => {
+                      const vs = a.visit_status || a.status || 'scheduled'
+                      return (
+                        <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/staff/loan/review/${a.id}`)}>
+                          <td style={{ fontWeight: 600 }}>{a.customer_name}</td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{a.appointment_time || 'N/A'}</td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{a.address || a.branch_address || 'N/A'}</td>
+                          <td><span className={`badge ${vs === 'completed' ? 'badge-success' : vs === 'pending' ? 'badge-warning' : 'badge-info'}`} style={{ fontSize: 10, textTransform: 'capitalize' }}>{vs}</span></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No visits scheduled for today</div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>Quick Actions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="review-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/staff/loan/new-applications')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#3b82f6' }}>fiber_new</span>
+                    <span>New Applications</span>
+                  </span>
+                  <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>chevron_right</span>
+                </div>
+                <div className="review-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/staff/loan/verification-queue')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#f59e0b' }}>verified</span>
+                    <span>Pending Verification</span>
+                  </span>
+                  <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>chevron_right</span>
+                </div>
+                <div className="review-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/staff/loan/visits')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#8b5cf6' }}>calendar_month</span>
+                    <span>Schedule Visit</span>
+                  </span>
+                  <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>chevron_right</span>
+                </div>
+                <div className="review-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/staff/loan/new-applications')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#ef4444' }}>feedback</span>
+                    <span>Send Clarification</span>
+                  </span>
+                  <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>chevron_right</span>
+                </div>
+                <div className="review-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/staff/loan/active')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#10b981' }}>account_balance</span>
+                    <span>Active Loans</span>
+                  </span>
+                  <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>chevron_right</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 16 }}>My Work Queue</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="custom-table" style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Loan ID</th>
+                      <th>Applicant</th>
+                      <th>Loan Type</th>
+                      <th>Amount</th>
+                      <th>Stage</th>
+                      <th>Priority</th>
+                      <th>Assigned</th>
+                      <th>Due</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workQueue.length > 0 ? workQueue.map(app => {
+                      const prio = (app.amount || 0) > 1000000 ? { l: 'High', c: '#ef4444', bg: 'rgba(239,68,68,0.12)' } : (app.amount || 0) > 500000 ? { l: 'Medium', c: '#f59e0b', bg: 'rgba(245,158,11,0.12)' } : { l: 'Low', c: '#10b981', bg: 'rgba(16,185,129,0.12)' }
+                      return (
+                        <tr key={app.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
+                          <td><span className="mono">{app.application_number}</span></td>
+                          <td style={{ fontWeight: 600 }}>{app.customer_name}</td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{app.loan_type}</td>
+                          <td style={{ fontWeight: 700 }}>{formatCurrency(app.amount)}</td>
+                          <td><span className="badge badge-info" style={{ fontSize: 10 }}>{app._stageLabel}</span></td>
+                          <td><span className="badge" style={{ background: prio.bg, color: prio.c, fontSize: 10 }}>{prio.l}</span></td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{formatDate(app.submitted_at || app.created_at)}</td>
+                          <td style={{ color: prio.l === 'High' ? '#ef4444' : 'var(--text-secondary)', fontSize: 12 }}>{prio.l === 'High' ? 'ASAP' : app.submitted_at ? '7 days' : '\u2014'}</td>
+                        </tr>
+                      )
+                    }) : (
+                      <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No items in work queue</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span><span className="material-symbols-rounded" style={{ fontSize: 14, marginRight: 4, verticalAlign: 'middle', color: 'var(--accent-color)' }}>checklist</span>Today's Tasks</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>{todayTasks.filter(t => t.done).length}/{todayTasks.length}</span>
+                </div>
+                {todayTasks.length > 0 ? todayTasks.map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid rgba(55,65,81,0.08)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 18, color: t.done ? 'var(--success)' : 'var(--warning)' }}>{t.done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, color: t.done ? 'var(--text-muted)' : '#fff', fontWeight: t.done ? 400 : 600, textDecoration: t.done ? 'line-through' : 'none' }}>{t.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{t.done ? 'Completed' : 'Pending'}</div>
                     </div>
-                    <div className="ld-activity-time">{formatDate(a.changed_at)}</div>
                   </div>
-                )
-              })
-            ) : (
-              <div className="text-muted" style={{ padding: '16px', textAlign: 'center', fontSize: '13px' }}>No recent activity</div>
-            )}
-          </div>
+                )) : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>No tasks for today</div>}
+              </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button className="btn btn-primary" onClick={() => navigate('/staff/loan/new-applications')}>
-              <span className="material-symbols-rounded">visibility</span> Review New Applications
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/staff/loan/visits')}>
-              <span className="material-symbols-rounded">calendar_month</span> View Branch Visits
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/staff/loan/verification-queue')}>
-              <span className="material-symbols-rounded">verified</span> Verification Queue
-            </button>
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 14, marginRight: 4, verticalAlign: 'middle', color: 'var(--warning)' }}>schedule</span>Upcoming Deadlines
+                </div>
+                {upcomingDeadlines.length > 0 ? upcomingDeadlines.map(d => (
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid rgba(55,65,81,0.08)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{d.loanId}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{d.applicant}</div>
+                    </div>
+                    <span className={`badge ${d.priority === 'high' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: 9, whiteSpace: 'nowrap' }}>{d.remaining}</span>
+                  </div>
+                )) : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>No upcoming deadlines</div>}
+              </div>
+
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--danger)' }}><span className="material-symbols-rounded" style={{ fontSize: 14, marginRight: 4, verticalAlign: 'middle' }}>priority_high</span>Priority Alerts</span>
+                  {priorityAlerts.length > 0 && <span className="badge badge-danger" style={{ fontSize: 9, padding: '2px 6px' }}>{priorityAlerts.length}</span>}
+                </div>
+                {priorityAlerts.length > 0 ? priorityAlerts.map(a => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid rgba(55,65,81,0.08)', cursor: 'pointer', borderRadius: 6 }} onClick={() => navigate(`/staff/loan/review/${a.id}`)}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0, boxShadow: '0 0 6px rgba(239,68,68,0.4)' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{a.loanId}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{a.applicant}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 1 }}>{a.reason}</div>
+                    </div>
+                    <span className="material-symbols-rounded" style={{ fontSize: 14, color: 'var(--text-muted)' }}>open_in_new</span>
+                  </div>
+                )) : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>No priority alerts</div>}
+              </div>
+
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 14, marginRight: 4, verticalAlign: 'middle', color: '#3b82f6' }}>history</span>Recent Staff Activities
+                </div>
+                {recentActivity.length > 0 ? recentActivity.slice(0, 6).map((a, idx) => {
+                  const colors = ['var(--success)', 'var(--warning)', '#8b5cf6', 'var(--accent-color)', '#6366f1', 'var(--danger)', '#94a3b8']
+                  const keywords = ['verified', 'clarification', 'scheduled', 'submitted', 'forwarded', 'rejected']
+                  let dotColor = '#94a3b8'
+                  for (let i = 0; i < keywords.length; i++) {
+                    if ((a.action || '').toLowerCase().includes(keywords[i])) { dotColor = colors[i]; break }
+                  }
+                  return (
+                    <div key={a.id || idx} style={{ display: 'flex', gap: 12, padding: '9px 0', borderBottom: '1px solid rgba(55,65,81,0.06)' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, marginTop: 5, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{a.action}</div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                          {a.application_number && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>{a.application_number}</span>}
+                          {a.staff_name && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>by {a.staff_name}</span>}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatDate(a.changed_at)}</div>
+                      </div>
+                    </div>
+                  )
+                }) : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>No recent activity</div>}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </>
   )
 }

@@ -41,9 +41,19 @@ const TIMELINE_ICONS = {
   approved:'check_circle', rejected:'cancel', disbursed:'account_balance'
 }
 
+const STATUS_ROLE = {
+  submitted:'User', under_review:'Staff', clarification_required:'Staff',
+  documents_verified:'Staff', visit_scheduled:'Staff',
+  final_review:'Admin', approved:'Admin', rejected:'Admin', disbursed:'Admin'
+}
+
+function cleanActorName(name) {
+  return (name || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+}
+
 function getStepState(app) {
   const status = app.status
-  const stepHistory = app.status_history || []
+  const stepHistory = buildTimeline(app.status_history || [], app)
   const docs = app.documents || []
   const steps = TRACK_STEPS.map(step => {
     let state = 'pending'
@@ -63,7 +73,15 @@ function getStepState(app) {
       if (entry) { state = 'completed'; date = entry.changed_at; by = entry.changed_by }
     } else {
       const entry = stepHistory.find(h => h.new_status === step.key)
-      if (entry) { state = 'completed'; date = entry.changed_at; by = entry.changed_by }
+      if (entry) {
+        const eRole = STATUS_ROLE[step.key] || ''
+        const aRole = entry.changed_by_role || ''
+        const role = eRole || aRole
+        const rawN = (entry.changed_by || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+        const crossPortal = /^(?:User|Staff|Admin)$/i.test(rawN)
+        const name = (eRole && eRole === aRole && !crossPortal) ? rawN : role
+        state = 'completed'; date = entry.changed_at; by = [role, name].filter((s,i) => i===0 || s).join('\n')
+      }
     }
 
     if (status === step.key && state !== 'completed') state = 'current'
@@ -86,6 +104,41 @@ function daysSince(dateStr) {
   const d = new Date(dateStr)
   const now = new Date()
   return Math.floor((now - d) / (1000*60*60*24))
+}
+
+function buildTimeline(statusHistory, app) {
+  const history = [...statusHistory].sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
+  const statuses = new Set(history.map(h => h.new_status))
+  const order = ['submitted','under_review','clarification_required','documents_verified','visit_scheduled','final_review','approved','rejected','disbursed']
+
+  if (statuses.has('documents_verified') && !statuses.has('under_review')) {
+    const submitted = history.find(h => h.new_status === 'submitted')
+    if (submitted) {
+      const t = new Date(new Date(submitted.changed_at).getTime() + 60000)
+      history.push({
+        id: 'syn_ur', new_status: 'under_review', changed_at: t.toISOString(),
+        changed_by: 'Staff', changed_by_role: 'Staff',
+        remarks: 'Initial application review completed.', synthetic: true
+      })
+    }
+  }
+
+  if (statuses.has('visit_scheduled') && !statuses.has('final_review')) {
+    const laterExists = history.some(h => order.indexOf(h.new_status) > order.indexOf('visit_scheduled'))
+    if (laterExists) {
+      const visit = history.find(h => h.new_status === 'visit_scheduled')
+      if (visit) {
+        const t = new Date(new Date(visit.changed_at).getTime() + 60000)
+        history.push({
+        id: 'syn_fr', new_status: 'final_review', changed_at: t.toISOString(),
+        changed_by: 'Admin', changed_by_role: 'Admin',
+          remarks: 'Application forwarded for final admin review.', synthetic: true
+        })
+      }
+    }
+  }
+
+  return history.sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
 }
 
 export default function LoanTracking() {
@@ -154,7 +207,7 @@ export default function LoanTracking() {
   const visibleSteps = steps.filter(s => !(s.optional && s.state === 'pending'))
   const totalSteps = visibleSteps.length
   const progressPct = app.status === 'rejected' || totalSteps === 0 ? 0 : Math.round((completedSteps / totalSteps) * 100)
-  const sortedHistory = (app.status_history || []).slice().sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
+  const sortedHistory = buildTimeline(app.status_history || [], app)
   const docs = app.documents || []
   const daysApplied = daysSince(app.submitted_at)
   const expectedDays = app.expected_processing_days || 5
@@ -598,12 +651,21 @@ export default function LoanTracking() {
                           <span className="material-symbols-rounded mat-icon">schedule</span>
                           {formatTime(h.changed_at)}
                         </span>
-                        {h.changed_by && (
-                          <span>
-                            <span className="material-symbols-rounded mat-icon">person</span>
-                            {h.changed_by_role ? `${h.changed_by_role}` : h.changed_by}
-                          </span>
-                        )}
+                        {h.changed_by && (() => {
+                          const eRole = STATUS_ROLE[h.new_status] || ''
+                          const aRole = h.changed_by_role || ''
+                          const role = eRole || aRole
+                          const rawN = (h.changed_by || '').replace(/^(?:User|Staff|Admin)[:\-]\s*/i, '')
+                          const crossPortal = /^(?:User|Staff|Admin)$/i.test(rawN)
+                          const name = (eRole && eRole === aRole && !crossPortal) ? rawN : role
+                          return (
+                            <span>
+                              <span className="material-symbols-rounded mat-icon">person</span>
+                              {role && <span>By {role}<br /></span>}
+                              {name}
+                            </span>
+                          )
+                        })()}
                       </div>
                       {h.remarks && <div className="lp-timeline-remark">{h.remarks}</div>}
                     </div>
