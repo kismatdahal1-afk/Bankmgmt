@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { staffListLoanApplications } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import Pagination from '../../components/common/Pagination'
 
 const STATUSES = ['documents_verified', 'final_review']
 
@@ -9,6 +10,11 @@ export default function StaffVerificationQueue() {
   const navigate = useNavigate()
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const paginatedApps = useMemo(() => apps.slice((currentPage - 1) * pageSize, currentPage * pageSize), [apps, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [apps.length])
 
   useEffect(() => {
     setLoading(true)
@@ -20,6 +26,8 @@ export default function StaffVerificationQueue() {
       .catch(() => { })
       .finally(() => setLoading(false))
   }, [])
+
+
 
   if (loading) return <div className="loading-skeleton"><div className="skeleton-card" /><div className="skeleton-card" /></div>
 
@@ -56,7 +64,7 @@ export default function StaffVerificationQueue() {
               </tr>
             </thead>
             <tbody>
-              {apps.map(app => {
+              {paginatedApps.map(app => {
                 const verifiedEntry = (app.status_history || []).find(h => h.new_status === 'documents_verified')
                 return (
                   <tr key={app.id} className="clickable" onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
@@ -67,7 +75,7 @@ export default function StaffVerificationQueue() {
                     <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                       {verifiedEntry ? formatDate(verifiedEntry.changed_at) : '—'}
                     </td>
-                    <td style={{ fontSize: '0.85rem' }}>{verifiedEntry?.changed_by || '—'}</td>
+                    <td style={{ fontSize: '0.85rem' }}>{verifiedEntry?.changed_by_name || verifiedEntry?.changed_by || '—'}</td>
                     <td>
                       <span className={`badge ${app.status === 'documents_verified' ? 'badge-success' : 'badge-info'}`}>
                         {app.status === 'documents_verified' ? 'Verified' : 'Admin Review'}
@@ -83,6 +91,7 @@ export default function StaffVerificationQueue() {
               })}
             </tbody>
           </table>
+          <Pagination currentPage={currentPage} totalItems={apps.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
         </div>
       ) : (
         <div className="empty" style={{ padding: '60px 20px' }}>

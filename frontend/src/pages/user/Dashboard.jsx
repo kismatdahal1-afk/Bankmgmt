@@ -23,12 +23,13 @@ export default function UserDashboard() {
   const { customer } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-
   useEffect(() => {
     api.get('/customer/dashboard')
       .then(r => { setData(r.data); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  const transactions = data?.recent_transactions || []
 
   if (loading) return <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>
 
@@ -171,7 +172,7 @@ export default function UserDashboard() {
               </tr>
             </thead>
             <tbody>
-              {data?.recent_transactions?.length > 0 ? data.recent_transactions.map((txn, i) => (
+              {data?.recent_transactions?.length > 0 ? transactions.map((txn, i) => (
                 <tr key={i}>
                   <td className="text-muted">{new Date(txn.created_at).toLocaleDateString()}</td>
                   <td className="mono">{txn.account?.account_number}</td>

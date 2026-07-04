@@ -27,3 +27,8 @@ export const staffRejectApplication = (appId, data) => api.post(`/staff/loan-app
 export const staffLoanDashboard = () => api.get('/staff/loan-dashboard')
 export const customerRespondClarification = (appId) => api.post(`/customer/loan-applications/${appId}/respond-clarification`)
 export const adminReturnToStaff = (appId, data) => api.post(`/admin/loan-applications/${appId}/return-to-staff`, data)
+export const adminPendingReviews = () => api.get('/admin/pending-reviews')
+export const adminActiveLoans = () => api.get('/admin/active-loans')
+export const adminDisbursedLoans = () => api.get('/admin/disbursed-loans')
+export const adminClosedLoans = () => api.get('/admin/closed-loans')
+export const adminLoanReports = (params) => api.get('/admin/loan-reports', { params })

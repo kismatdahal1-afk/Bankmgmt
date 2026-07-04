@@ -125,8 +125,8 @@ export default function AdminStaffManagement() {
               </td></tr>
             )}
           </tbody>
-        </table>
-      </div>
-    </>
-  )
-}
+          </table>
+        </div>
+      </>
+    )
+  }

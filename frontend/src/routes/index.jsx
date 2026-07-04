@@ -50,9 +50,14 @@ import StaffNewApplications from '../pages/staff/StaffNewApplications'
 import StaffVerificationQueue from '../pages/staff/StaffVerificationQueue'
 import StaffBranchVisits from '../pages/staff/StaffBranchVisits'
 import StaffActiveLoans from '../pages/staff/StaffActiveLoans'
-import AdminLoanApproval from '../pages/admin/LoanApproval'
+import AdminLoanApplications from '../pages/admin/LoanApplications'
 import AdminLoanReview from '../pages/admin/LoanReviewAdmin'
 import AdminLoanDashboard from '../pages/admin/LoanDashboard'
+import AdminPendingReviews from '../pages/admin/PendingReviews'
+import AdminActiveLoans from '../pages/admin/ActiveLoans'
+import AdminDisbursedLoans from '../pages/admin/DisbursedLoans'
+import AdminClosedLoans from '../pages/admin/ClosedLoans'
+import AdminLoanReports from '../pages/admin/LoanReports'
 import FundTransfer from '../pages/user/FundTransfer'
 import TransferSuccess from '../pages/user/TransferSuccess'
 import UserTransactions from '../pages/user/Transactions'
@@ -87,15 +92,15 @@ export default function AppRoutes() {
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="loan/dashboard" element={<AdminLoanDashboard />} />
-        <Route path="loan/applications" element={<AdminLoanApproval />} />
+        <Route path="loan/applications" element={<AdminLoanApplications />} />
         <Route path="loan/applications/:id" element={<AdminLoanReview />} />
-        <Route path="loan/pending" element={<AdminLoanApproval />} />
-        <Route path="loan/active" element={<AdminLoans />} />
-        <Route path="loan/disbursed" element={<PlaceholderPage title="Disbursed Loans" icon="payments" />} />
-        <Route path="loan/closed" element={<PlaceholderPage title="Closed Loans" icon="folder" />} />
-        <Route path="loan/reports" element={<PlaceholderPage title="Loan Reports" icon="analytics" />} />
+        <Route path="loan/pending" element={<AdminPendingReviews />} />
+        <Route path="loan/active" element={<AdminActiveLoans />} />
+        <Route path="loan/disbursed" element={<AdminDisbursedLoans />} />
+        <Route path="loan/closed" element={<AdminClosedLoans />} />
+        <Route path="loan/reports" element={<AdminLoanReports />} />
         <Route path="loan-dashboard" element={<AdminLoanDashboard />} />
-        <Route path="loan-approval" element={<AdminLoanApproval />} />
+        <Route path="loan-approval" element={<AdminLoanApplications />} />
         <Route path="loan-approval/:id" element={<AdminLoanReview />} />
       </Route>
       <Route path="/staff" element={<PrivateRoute role="staff"><StaffLayout /></PrivateRoute>}>

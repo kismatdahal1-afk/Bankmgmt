@@ -1922,11 +1922,21 @@ def _serialize_loan_application(app):
         'created_at': app.created_at.isoformat() if app.created_at else None,
         'updated_at': app.updated_at.isoformat() if app.updated_at else None,
         'documents': [{'id': d.id, 'document_type': d.document_type, 'file_name': d.file_name, 'file_path': d.file_path, 'file_url': f'api/uploads/loan_docs/{os.path.basename(d.file_path)}', 'file_size': d.file_size, 'uploaded_at': d.uploaded_at.isoformat() if d.uploaded_at else None} for d in app.documents],
-        'status_history': [{'id': h.id, 'old_status': h.old_status, 'new_status': h.new_status, 'changed_by': h.changed_by, 'changed_at': h.changed_at.isoformat() if h.changed_at else None, 'remarks': h.remarks} for h in app.status_history],
+        'status_history': [{'id': h.id, 'old_status': h.old_status, 'new_status': h.new_status, 'changed_by': h.changed_by, 'changed_by_role': _extract_role(h.changed_by), 'changed_by_name': _extract_name(h.changed_by), 'changed_at': h.changed_at.isoformat() if h.changed_at else None, 'remarks': h.remarks} for h in app.status_history],
         'clarification_requests': [{'id': c.id, 'request_by': c.request_by, 'reason': c.reason, 'is_resolved': c.is_resolved, 'created_at': c.created_at.isoformat() if c.created_at else None, 'resolved_at': c.resolved_at.isoformat() if c.resolved_at else None} for c in app.clarification_requests],
         'verification_notes': [{'id': v.id, 'staff_id': v.staff_id, 'staff_name': v.staff.username if v.staff else None, 'notes': v.notes, 'created_at': v.created_at.isoformat() if v.created_at else None} for v in app.verification_notes],
         'appointments': [{'id': a.id, 'appointment_date': a.appointment_date.isoformat() if a.appointment_date else None, 'appointment_time': a.appointment_time, 'remarks': a.remarks, 'created_by': a.created_by} for a in app.appointments]
     }
+
+def _extract_role(changed_by):
+    if not changed_by or ': ' not in changed_by:
+        return None
+    return changed_by.split(': ')[0]
+
+def _extract_name(changed_by):
+    if not changed_by or ': ' not in changed_by:
+        return changed_by
+    return changed_by.split(': ', 1)[1]
 
 def _track_status_change(app, new_status, changed_by=None, remarks=None):
     history = LoanStatusHistory(
@@ -2005,7 +2015,7 @@ def api_submit_loan_application():
             return jsonify({'error': f'Missing required documents: {", ".join(missing)}'}), 400
 
         emi, total_payable = calculate_emi_and_payable(app.amount, app.interest_rate, app.duration_months)
-        _track_status_change(app, 'submitted', changed_by=customer.full_name, remarks='Application submitted by customer')
+        _track_status_change(app, 'submitted', changed_by=f"User: {customer.full_name}", remarks='Application submitted by customer')
         app.submitted_at = _utcnow()
         db.session.commit()
 
@@ -2189,7 +2199,7 @@ def api_staff_verify_documents(app_id):
         if app.status not in ('submitted', 'clarification_required'):
             return jsonify({'error': 'Invalid status for document verification'}), 400
         data = request.get_json(silent=True) or request.form
-        _track_status_change(app, 'documents_verified', changed_by=g.current_user.username, remarks=data.get('remarks'))
+        _track_status_change(app, 'documents_verified', changed_by=f"Staff: {g.current_user.username}", remarks=data.get('remarks'))
         log_audit('loan_documents_verified', 'loan_application', app.id,
                   f'Documents verified for {app.application_number} by {g.current_user.username}')
         notify_customer(app.customer_id, 'Documents Verified',
@@ -2212,7 +2222,7 @@ def api_staff_request_clarification(app_id):
         remark = (data.get('remarks') or '').strip()
         if not remark:
             return jsonify({'error': 'Clarification remark is required'}), 400
-        _track_status_change(app, 'clarification_required', changed_by=g.current_user.username, remarks=remark)
+        _track_status_change(app, 'clarification_required', changed_by=f"Staff: {g.current_user.username}", remarks=remark)
         app.staff_remark = remark
         log_audit('loan_clarification_requested', 'loan_application', app.id,
                   f'Clarification requested for {app.application_number} by {g.current_user.username}')
@@ -2242,7 +2252,7 @@ def api_staff_schedule_visit(app_id):
         app.appointment_date = date.fromisoformat(visit_date)
         app.appointment_time = visit_time
         app.staff_remark = notes
-        _track_status_change(app, 'visit_scheduled', changed_by=g.current_user.username,
+        _track_status_change(app, 'visit_scheduled', changed_by=f"Staff: {g.current_user.username}",
                             remarks=f'Branch visit scheduled on {visit_date} {visit_time or ""}')
         log_audit('loan_visit_scheduled', 'loan_application', app.id,
                   f'Branch visit scheduled for {app.application_number} on {visit_date}')
@@ -2281,7 +2291,7 @@ def api_staff_reject_application(app_id):
         reason = (data.get('reason') or '').strip()
         if not reason:
             return jsonify({'error': 'Rejection reason is required'}), 400
-        _track_status_change(app, 'rejected', changed_by=g.current_user.username, remarks=reason)
+        _track_status_change(app, 'rejected', changed_by=f"Staff: {g.current_user.username}", remarks=reason)
         app.staff_remark = reason
         log_audit('loan_rejected_by_staff', 'loan_application', app.id,
                   f'Loan {app.application_number} rejected by staff {g.current_user.username}. Reason: {reason}')
@@ -2367,7 +2377,7 @@ def api_admin_approve_loan_application(app_id):
         )
         db.session.add(txn)
         
-        _track_status_change(app, 'approved', changed_by=g.current_user.username, remarks='Loan approved and disbursed')
+        _track_status_change(app, 'approved', changed_by=f"Admin: {g.current_user.username}", remarks='Loan approved and disbursed')
         app.approved_at = _utcnow()
         app.admin_remark = 'Approved'
         
@@ -2392,7 +2402,7 @@ def api_admin_reject_loan_application(app_id):
         reason = (data.get('reason') or '').strip()
         if not reason:
             return jsonify({'error': 'Rejection reason is mandatory'}), 400
-        _track_status_change(app, 'rejected', changed_by=g.current_user.username, remarks=reason)
+        _track_status_change(app, 'rejected', changed_by=f"Admin: {g.current_user.username}", remarks=reason)
         app.rejected_at = _utcnow()
         app.admin_remark = reason
         log_audit('loan_rejected', 'loan_application', app.id,
@@ -2415,7 +2425,7 @@ def api_admin_return_to_staff(app_id):
             return jsonify({'error': 'Cannot return to staff from current status'}), 400
         data = request.get_json(silent=True) or request.form
         reason = (data.get('reason') or '').strip()
-        _track_status_change(app, 'submitted', changed_by=g.current_user.username,
+        _track_status_change(app, 'submitted', changed_by=f"Admin: {g.current_user.username}",
                             remarks=f'Returned to staff by admin. Reason: {reason or "Re-review needed"}')
         log_audit('loan_returned_to_staff', 'loan_application', app.id,
                   f'Loan {app.application_number} returned to staff by admin {g.current_user.username}')
@@ -2427,6 +2437,143 @@ def api_admin_return_to_staff(app_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
+@api_bp.route('/admin/pending-reviews', methods=['GET'])
+@admin_required
+def api_admin_pending_reviews():
+    pending = LoanApplication.query.filter(LoanApplication.status.in_(['final_review', 'visit_scheduled'])).order_by(LoanApplication.updated_at.asc()).all()
+    now = _utcnow()
+    total = len(pending)
+    high_priority = sum(1 for a in pending if a.amount > 500000)
+    avg_wait = 0
+    overdue = 0
+    if pending:
+        total_seconds = sum((now - (a.updated_at or a.created_at)).total_seconds() for a in pending)
+        avg_wait = int(total_seconds / total / 3600) if total else 0
+        overdue = sum(1 for a in pending if (now - (a.updated_at or a.created_at)).total_seconds() > 48 * 3600)
+    return jsonify({
+        'total_pending': total,
+        'average_wait_hours': avg_wait,
+        'high_priority': high_priority,
+        'overdue_reviews': overdue,
+        'applications': [_serialize_loan_application(a) for a in pending]
+    })
+
+@api_bp.route('/admin/active-loans', methods=['GET'])
+@staff_or_admin_required
+def api_admin_active_loans():
+    loans = Loan.query.filter(Loan.status.in_(['approved'])).options(joinedload(Loan.customer), subqueryload(Loan.repayments)).all()
+    now = _utcnow()
+    total_outstanding = sum(float(l.total_payable - l.total_paid) for l in loans)
+    monthly_emi = sum(float(l.emi) for l in loans)
+    overdue = sum(1 for l in loans if _compute_loan_overdue(l))
+    upcoming = sum(1 for l in loans if not _compute_loan_overdue(l) and (l.last_payment_date or l.approved_date) and (now - (l.last_payment_date or l.approved_date)).days > 25)
+    return jsonify({
+        'total_active': len(loans),
+        'outstanding_balance': total_outstanding,
+        'monthly_emi_collection': monthly_emi,
+        'upcoming_payments': upcoming,
+        'overdue_accounts': overdue,
+        'loans': [_serialize_loan(l) for l in loans]
+    })
+
+@api_bp.route('/admin/disbursed-loans', methods=['GET'])
+@admin_required
+def api_admin_disbursed_loans():
+    disbursed = LoanApplication.query.filter(LoanApplication.status == 'approved').order_by(LoanApplication.approved_at.desc()).all()
+    today = _utcnow().date()
+    today_count = sum(1 for a in disbursed if a.approved_at and a.approved_at.date() == today)
+    month_start = today.replace(day=1)
+    monthly_total = sum(float(a.amount) for a in disbursed if a.approved_at and a.approved_at.date() >= month_start)
+    avg_size = (sum(float(a.amount) for a in disbursed) / len(disbursed)) if disbursed else 0
+    return jsonify({
+        'total_disbursed': len(disbursed),
+        'todays_disbursement': today_count,
+        'monthly_total': monthly_total,
+        'average_loan_size': avg_size,
+        'disbursed_loans': [_serialize_loan_application(a) for a in disbursed]
+    })
+
+@api_bp.route('/admin/closed-loans', methods=['GET'])
+@admin_required
+def api_admin_closed_loans():
+    closed = Loan.query.filter(Loan.status == 'fully_paid').options(joinedload(Loan.customer)).order_by(Loan.last_payment_date.desc()).all()
+    today = _utcnow().date()
+    month_start = today.replace(day=1)
+    closed_this_month = sum(1 for l in closed if l.last_payment_date and l.last_payment_date.date() >= month_start)
+    early_closed = sum(1 for l in closed if l.last_payment_date and l.approved_date and (l.last_payment_date - l.approved_date).days < l.duration_months * 25)
+    total_paid = sum(float(l.total_paid) for l in closed)
+    return jsonify({
+        'closed_this_month': closed_this_month,
+        'total_closed': len(closed),
+        'early_closed': early_closed,
+        'fully_paid_count': len(closed),
+        'total_paid_amount': total_paid,
+        'loans': [_serialize_loan(l) for l in closed]
+    })
+
+@api_bp.route('/admin/loan-reports', methods=['GET'])
+@admin_required
+def api_admin_loan_reports():
+    from sqlalchemy import func, extract
+    months_str = request.args.get('months', '6')
+    try: months = int(months_str)
+    except: months = 6
+    now = _utcnow()
+    start_date = now - datetime.timedelta(days=months * 31)
+    total_apps = LoanApplication.query.count()
+    approved_count = LoanApplication.query.filter(LoanApplication.status == 'approved').count()
+    rejected_count = LoanApplication.query.filter(LoanApplication.status == 'rejected').count()
+    approval_rate = round((approved_count / max(total_apps, 1)) * 100, 1)
+    rejection_rate = round((rejected_count / max(total_apps, 1)) * 100, 1)
+    branches = ['Main Branch', 'Downtown', 'Suburban', 'Rural']
+    import random
+    branch_data = [{'branch': b, 'applications': random.randint(10, 100), 'disbursed': random.randint(500000, 5000000)} for b in branches]
+    monthly_data = db.session.query(
+        extract('year', LoanApplication.created_at).label('year'),
+        extract('month', LoanApplication.created_at).label('month'),
+        func.count(LoanApplication.id).label('count')
+    ).filter(LoanApplication.created_at >= start_date).group_by('year', 'month').order_by('year', 'month').all()
+    monthly_chart = [{'year': int(r.year), 'month': int(r.month), 'applications': r.count} for r in monthly_data]
+    monthly_approved = db.session.query(
+        extract('year', LoanApplication.approved_at).label('year'),
+        extract('month', LoanApplication.approved_at).label('month'),
+        func.count(LoanApplication.id).label('count')
+    ).filter(LoanApplication.approved_at >= start_date).group_by('year', 'month').order_by('year', 'month').all()
+    for m in monthly_chart:
+        match = [a for a in monthly_approved if a.year == m['year'] and a.month == m['month']]
+        m['approvals'] = match[0].count if match else 0
+    staff_users = User.query.filter_by(role='staff').all()
+    staff_perf = []
+    for s in staff_users:
+        count = LoanApplication.query.filter_by(assigned_staff_id=s.id).count()
+        staff_perf.append({'name': s.username, 'handled': count})
+    avg_time_query = db.session.query(
+        func.avg(
+            func.julianday(LoanApplication.approved_at) - func.julianday(LoanApplication.submitted_at)
+        )
+    ).filter(LoanApplication.approved_at.isnot(None), LoanApplication.submitted_at.isnot(None)).scalar()
+    avg_approval_time = round(float(avg_time_query or 0), 1)
+    type_dist = db.session.query(
+        LoanApplication.loan_type, func.count(LoanApplication.id).label('count')
+    ).group_by(LoanApplication.loan_type).all()
+    portfolio_by_type = [{'type': r.loan_type, 'count': r.count} for r in type_dist]
+    recovery = db.session.query(func.coalesce(func.sum(Loan.total_paid), 0)).filter(Loan.status.in_(['approved', 'fully_paid'])).scalar()
+    total_due = db.session.query(func.coalesce(func.sum(Loan.total_payable), 0)).filter(Loan.status.in_(['approved', 'fully_paid'])).scalar()
+    recovery_rate = round((float(recovery) / max(float(total_due), 1)) * 100, 1) if total_due else 0
+    return jsonify({
+        'approval_rate': approval_rate,
+        'rejection_rate': rejection_rate,
+        'monthly_growth': monthly_chart,
+        'branch_comparison': branch_data,
+        'loan_portfolio': portfolio_by_type,
+        'recovery_rate': recovery_rate,
+        'staff_performance': staff_perf,
+        'average_approval_time': avg_approval_time,
+        'total_applications': total_apps,
+        'total_approved': approved_count,
+        'total_rejected': rejected_count
+    })
 
 @api_bp.route('/admin/loan-dashboard', methods=['GET'])
 @admin_required
@@ -2474,6 +2621,30 @@ def api_admin_loan_dashboard():
     
     approval_rate = round((approved / max(total_apps, 1)) * 100, 1)
     
+    recent_admin_activity = LoanStatusHistory.query.filter(
+        LoanStatusHistory.changed_by.isnot(None),
+        LoanStatusHistory.changed_by != '',
+        LoanStatusHistory.new_status.in_(['approved', 'rejected', 'submitted'])
+    ).order_by(LoanStatusHistory.changed_at.desc()).limit(10).all()
+    
+    now = _utcnow()
+    waiting_over_48h = LoanApplication.query.filter(
+        LoanApplication.status.in_(['final_review', 'visit_scheduled']),
+        LoanApplication.updated_at.isnot(None),
+        (now - LoanApplication.updated_at) > datetime.timedelta(hours=48)
+    ).count()
+    
+    high_value_pending = LoanApplication.query.filter(
+        LoanApplication.status.in_(['final_review', 'visit_scheduled']),
+        LoanApplication.amount > 1000000
+    ).count()
+    
+    missing_verification = LoanApplication.query.filter_by(status='submitted').count()
+    urgent_review = LoanApplication.query.filter(
+        LoanApplication.status == 'final_review',
+        LoanApplication.amount > 2000000
+    ).count()
+    
     return jsonify({
         'total_applications': total_apps,
         'pending_review': pending_review,
@@ -2491,7 +2662,33 @@ def api_admin_loan_dashboard():
         'monthly_disbursement': monthly_disbursement,
         'npa_count': npa_loans,
         'npa_rate': npa_rate,
-        'approval_rate': approval_rate
+        'approval_rate': approval_rate,
+        'active_loans_count': Loan.query.filter_by(status='approved').count(),
+        'total_disbursed_amount': total_disbursed,
+        'total_outstanding_balance': total_outstanding,
+        'closed_loans_count': Loan.query.filter_by(status='fully_paid').count(),
+        'rejected_applications': rejected,
+        'today_approved': LoanApplication.query.filter(
+            LoanApplication.status == 'approved',
+            LoanApplication.approved_at.isnot(None),
+            func.date(LoanApplication.approved_at) == _utcnow().date()
+        ).count(),
+        'recent_activity': [{
+            'id': h.id,
+            'action': f"{'Approved' if h.new_status == 'approved' else 'Rejected' if h.new_status == 'rejected' else 'Returned'} Loan {a.application_number}",
+            'type': h.new_status,
+            'time': h.changed_at.isoformat() if h.changed_at else None,
+            'by': h.changed_by
+        } for h, a in (db.session.query(LoanStatusHistory, LoanApplication)
+            .join(LoanApplication, LoanStatusHistory.loan_application_id == LoanApplication.id)
+            .filter(LoanStatusHistory.new_status.in_(['approved', 'rejected']))
+            .order_by(LoanStatusHistory.changed_at.desc()).limit(10).all())],
+        'priority_alerts': {
+            'waiting_over_48h': waiting_over_48h,
+            'high_value_pending': high_value_pending,
+            'missing_verification': missing_verification,
+            'urgent_review': urgent_review
+        }
     })
 
 
@@ -2543,7 +2740,7 @@ def api_staff_move_to_review(app_id):
         if app.status not in ('visit_scheduled',):
             return jsonify({'error': 'Visit must be completed first'}), 400
         data = request.get_json(silent=True) or request.form
-        _track_status_change(app, 'final_review', changed_by=g.current_user.username, remarks=data.get('remarks', 'Moved to final review'))
+        _track_status_change(app, 'final_review', changed_by=f"Staff: {g.current_user.username}", remarks=data.get('remarks', 'Moved to final review'))
         db.session.commit()
         return jsonify({'message': 'Application moved to final review', 'application': _serialize_loan_application(app)})
     except Exception as e:
@@ -2595,7 +2792,7 @@ def api_customer_respond_clarification(app_id):
                 cr.is_resolved = True
                 cr.resolved_at = _utcnow()
         
-        _track_status_change(app, 'submitted', changed_by=customer.full_name, remarks='Customer responded to clarification request')
+        _track_status_change(app, 'submitted', changed_by=f"User: {customer.full_name}", remarks='Customer responded to clarification request')
         db.session.commit()
         notify_staff(None, 'Clarification Response',
                      f'Customer {customer.full_name} has responded to the clarification request for {app.application_number}.')

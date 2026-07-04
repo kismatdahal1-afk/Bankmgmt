@@ -601,7 +601,7 @@ export default function LoanTracking() {
                         {h.changed_by && (
                           <span>
                             <span className="material-symbols-rounded mat-icon">person</span>
-                            {h.changed_by}
+                            {h.changed_by_role ? `${h.changed_by_role}` : h.changed_by}
                           </span>
                         )}
                       </div>

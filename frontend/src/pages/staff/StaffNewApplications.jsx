@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { staffListLoanApplications } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import Pagination from '../../components/common/Pagination'
 
 const PRIORITY_MAP = {
   submitted: { label: 'Newly Submitted', color: '#3b82f6' },
@@ -12,6 +13,8 @@ export default function StaffNewApplications() {
   const navigate = useNavigate()
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const fetchAll = async () => {
     setLoading(true)
@@ -29,6 +32,10 @@ export default function StaffNewApplications() {
   }
 
   useEffect(() => { fetchAll() }, [])
+
+  const paginatedApps = useMemo(() => apps.slice((currentPage - 1) * pageSize, currentPage * pageSize), [apps, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [apps.length])
 
   if (loading) return <div className="loading-skeleton"><div className="skeleton-card" /><div className="skeleton-card" /></div>
 
@@ -65,7 +72,7 @@ export default function StaffNewApplications() {
               </tr>
             </thead>
             <tbody>
-              {apps.map(app => (
+              {paginatedApps.map(app => (
                 <tr key={app.id} className="clickable" onClick={() => navigate(`/staff/loan/review/${app.id}`)}>
                   <td><span className="mono">{app.application_number}</span></td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{app.customer_name}</td>
@@ -94,6 +101,7 @@ export default function StaffNewApplications() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={currentPage} totalItems={apps.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
         </div>
       ) : (
         <div className="empty" style={{ padding: '60px 20px' }}>

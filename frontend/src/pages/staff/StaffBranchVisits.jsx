@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { staffListLoanApplications, staffScheduleVisit } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/helpers'
+import Pagination from '../../components/common/Pagination'
 
 export default function StaffBranchVisits() {
   const navigate = useNavigate()
@@ -13,6 +14,8 @@ export default function StaffBranchVisits() {
   const [visitNotes, setVisitNotes] = useState('')
   const [processing, setProcessing] = useState(false)
   const [msg, setMsg] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const fetchVisits = async () => {
     setLoading(true)
@@ -30,6 +33,10 @@ export default function StaffBranchVisits() {
     visitDate: v.appointment_date || '—',
     visitTime: v.appointment_time || '—',
   }))
+
+  const paginatedVisits = useMemo(() => allVisits.slice((currentPage - 1) * pageSize, currentPage * pageSize), [allVisits, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [visits.length])
 
   const todayStr = new Date().toISOString().split('T')[0]
   const todayVisits = allVisits.filter(v => v.appointment_date === todayStr)
@@ -53,50 +60,6 @@ export default function StaffBranchVisits() {
   }
 
   if (loading) return <div className="loading-skeleton"><div className="skeleton-card" /><div className="skeleton-card" /></div>
-
-  const renderTable = (rows, emptyMsg) => (
-    <div className="table-container" style={{ marginTop: rows === allVisits ? 0 : '16px' }}>
-      {rows.length > 0 ? (
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th>Loan ID</th>
-              <th>Customer</th>
-              <th>Visit Date</th>
-              <th>Visit Time</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(v => (
-              <tr key={v.id} className="clickable" onClick={() => navigate(`/staff/loan/review/${v.id}`)}>
-                <td><span className="mono">{v.application_number}</span></td>
-                <td style={{ fontWeight: 600, color: '#fff' }}>{v.customer_name}</td>
-                <td>{v.visitDate}</td>
-                <td>{v.visitTime}</td>
-                <td style={{ fontWeight: 600 }}>{formatCurrency(v.amount)}</td>
-                <td>
-                  <span className="badge badge-info">Scheduled</span>
-                </td>
-                <td>
-                  <button className="btn btn-sm btn-secondary" onClick={(e) => { e.stopPropagation(); navigate(`/staff/loan/review/${v.id}`) }}>
-                    View
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="empty" style={{ padding: '30px 20px' }}>
-          <span className="material-symbols-rounded" style={{ fontSize: '36px', color: 'var(--text-muted)' }}>event</span>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>{emptyMsg}</div>
-        </div>
-      )}
-    </div>
-  )
 
   return (
     <>
@@ -124,41 +87,57 @@ export default function StaffBranchVisits() {
         </div>
       )}
 
-      {allVisits.length === 0 ? renderTable([], 'No branch visits scheduled.') : (
-        <>
-          {todayVisits.length > 0 && (
-            <div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '18px', color: '#f59e0b' }}>today</span>
-                Today's Visits
-                <span className="badge badge-warning" style={{ fontSize: '0.75rem', padding: '2px 10px', marginLeft: '4px' }}>{todayVisits.length}</span>
-              </div>
-              {renderTable(todayVisits, '')}
+      {allVisits.length === 0 ? (
+        <div className="table-container">
+          <div className="empty" style={{ padding: '30px 20px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '36px', color: 'var(--text-muted)' }}>event</span>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>No branch visits scheduled.</div>
+          </div>
+        </div>
+      ) : (
+        <div className="table-container">
+          <div className="table-header-bar">
+            <span className="table-title">All Branch Visits</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {todayVisits.length > 0 && <span className="badge badge-warning" style={{ fontSize: '0.75rem', padding: '2px 10px' }}>{todayVisits.length} Today</span>}
+              {upcomingVisits.length > 0 && <span className="badge badge-info" style={{ fontSize: '0.75rem', padding: '2px 10px' }}>{upcomingVisits.length} Upcoming</span>}
+              {pastVisits.length > 0 && <span className="badge badge-muted" style={{ fontSize: '0.75rem', padding: '2px 10px' }}>{pastVisits.length} Past</span>}
             </div>
-          )}
-
-          {upcomingVisits.length > 0 && (
-            <div style={{ marginTop: '24px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '18px', color: '#3b82f6' }}>calendar_month</span>
-                Upcoming Visits
-                <span className="badge badge-info" style={{ fontSize: '0.75rem', padding: '2px 10px', marginLeft: '4px' }}>{upcomingVisits.length}</span>
-              </div>
-              {renderTable(upcomingVisits, '')}
-            </div>
-          )}
-
-          {pastVisits.length > 0 && (
-            <div style={{ marginTop: '24px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: '18px', color: '#64748b' }}>history</span>
-                Past Visits
-                <span className="badge badge-muted" style={{ fontSize: '0.75rem', padding: '2px 10px', marginLeft: '4px' }}>{pastVisits.length}</span>
-              </div>
-              {renderTable(pastVisits, '')}
-            </div>
-          )}
-        </>
+          </div>
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Loan ID</th>
+                <th>Customer</th>
+                <th>Visit Date</th>
+                <th>Visit Time</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedVisits.map(v => (
+                <tr key={v.id} className="clickable" onClick={() => navigate(`/staff/loan/review/${v.id}`)}>
+                  <td><span className="mono">{v.application_number}</span></td>
+                  <td style={{ fontWeight: 600, color: '#fff' }}>{v.customer_name}</td>
+                  <td>{v.visitDate}</td>
+                  <td>{v.visitTime}</td>
+                  <td style={{ fontWeight: 600 }}>{formatCurrency(v.amount)}</td>
+                  <td>
+                    <span className="badge badge-info">Scheduled</span>
+                  </td>
+                  <td>
+                    <button className="btn btn-sm btn-secondary" onClick={(e) => { e.stopPropagation(); navigate(`/staff/loan/review/${v.id}`) }}>
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pagination currentPage={currentPage} totalItems={allVisits.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+        </div>
       )}
     </>
   )

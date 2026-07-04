@@ -38,6 +38,8 @@ export default function StaffLoanVerification() {
   useEffect(() => { fetch() }, [fetch])
   useEffect(() => { if (statusParam) setFilter(statusParam) }, [statusParam])
 
+
+
   return (
     <>
       <div className="page-header">

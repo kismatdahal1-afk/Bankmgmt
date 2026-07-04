@@ -593,7 +593,7 @@ export default function StaffLoanReview() {
                   <div className="sr-tl-content">
                     <div className="sr-tl-action">{h.old_status || '—'} → {h.new_status}</div>
                     {h.remarks && <div className="sr-tl-remark">{h.remarks}</div>}
-                    <div className="sr-tl-date">{formatDate(h.changed_at)} by {h.changed_by}</div>
+                    <div className="sr-tl-date">{formatDate(h.changed_at)} by {h.changed_by_role || h.changed_by}</div>
                   </div>
                 </div>
               ))

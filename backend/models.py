@@ -215,8 +215,26 @@ class ReferenceSequence(db.Model):
 class LoanApplication(db.Model):
     __tablename__ = 'loan_applications'
 
+    @staticmethod
+    def _generate_application_number():
+        from datetime import date
+        year = date.today().year
+        prefix = f"LA-{year}A"
+        max_app = LoanApplication.query.filter(
+            LoanApplication.application_number.like(f"{prefix}%")
+        ).order_by(LoanApplication.application_number.desc()).first()
+        if max_app:
+            try:
+                last_num = int(max_app.application_number[-4:])
+                next_num = last_num + 1
+            except (ValueError, IndexError):
+                next_num = 1
+        else:
+            next_num = 1
+        return f"{prefix}{next_num:04d}"
+
     id = db.Column(db.Integer, primary_key=True)
-    application_number = db.Column(db.String(30), unique=True, nullable=False, default=lambda: f"LA-{uuid.uuid4().hex[:10].upper()}")
+    application_number = db.Column(db.String(30), unique=True, nullable=False, default=lambda: LoanApplication._generate_application_number())
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
     loan_type = db.Column(db.String(30), nullable=False)
     amount = db.Column(db.Numeric(15, 2), nullable=False)

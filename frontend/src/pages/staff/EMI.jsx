@@ -18,6 +18,7 @@ export default function StaffEMI() {
   const activeCount = emiLoans.filter(l => l.status === 'approved' && !l.is_overdue).length
   const overdueCount = emiLoans.filter(l => l.is_overdue).length
 
+
   if (selectedLoan) {
     const loan = selectedLoan
     const paid = parseFloat(loan.total_paid)
@@ -62,7 +63,7 @@ export default function StaffEMI() {
             </tbody>
           </table>
         </div>
-      </>
+    </>
     )
   }
 

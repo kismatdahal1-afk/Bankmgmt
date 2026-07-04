@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
 import ReceiptView from '../../components/common/ReceiptView'
+import Pagination from '../../components/common/Pagination'
 
 function splitTxnId(id) {
   if (!id) return ['', '—']
@@ -43,6 +44,8 @@ export default function AdminTransactions() {
   const [receiptTxn, setReceiptTxn] = useState(null)
   const [receiptData, setReceiptData] = useState(null)
   const [receiptLoading, setReceiptLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const fetchTransactions = useCallback(async (url = '/api/transactions/') => {
     try {
@@ -202,6 +205,10 @@ export default function AdminTransactions() {
     return result
   }, [transactions, customerName, transactionId, filterBy, dateFrom, dateTo])
 
+  const paginated = useMemo(() => displayedTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize), [displayedTransactions, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [displayedTransactions.length])
+
   const totals = useMemo(() => {
     const total = displayedTransactions.length
     const deposits = displayedTransactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0)
@@ -354,7 +361,7 @@ export default function AdminTransactions() {
               </tr>
             </thead>
             <tbody>
-              {displayedTransactions.length > 0 ? displayedTransactions.map(txn => {
+              {paginated.length > 0 ? paginated.map(txn => {
                 const [txnPrefix, txnNum] = splitTxnId(txn.reference_number || txn.transaction_uuid)
                 const [txnDate, txnTime] = splitTimestamp(txn.created_at)
                 const balBefore = txn.balance_before != null ? formatCurrency(txn.balance_before) : '—'
@@ -401,7 +408,9 @@ export default function AdminTransactions() {
               )}
             </tbody>
           </table>
+          <Pagination currentPage={currentPage} totalItems={displayedTransactions.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
         </div>
+
       </div>
 
       {receiptTxn && (

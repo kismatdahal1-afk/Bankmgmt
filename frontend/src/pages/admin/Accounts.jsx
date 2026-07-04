@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
 import CustomerFormComponent from '../../components/forms/CustomerForm'
 import CredentialCard from '../../components/common/CredentialCard'
+import Pagination from '../../components/common/Pagination'
 
 export default function AdminAccounts() {
   const navigate = useNavigate()
@@ -76,6 +77,12 @@ export default function AdminAccounts() {
   }
 
   const handleKeyDown = (e) => { if (e.key === 'Enter') fetchAccounts() }
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const paginatedAccounts = useMemo(() => accounts.slice((currentPage - 1) * pageSize, currentPage * pageSize), [accounts, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [accounts.length])
 
   return (
     <>
@@ -188,7 +195,7 @@ export default function AdminAccounts() {
               </tr>
             </thead>
             <tbody>
-              {accounts.length > 0 ? accounts.map(acc => (
+              {paginatedAccounts.length > 0 ? paginatedAccounts.map(acc => (
                 <tr
                   key={acc.id}
                   onClick={() => navigate(`/admin/account-management/${acc.id}`)}
@@ -224,6 +231,7 @@ export default function AdminAccounts() {
             </tbody>
           </table>
         )}
+        <Pagination currentPage={currentPage} totalItems={accounts.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
       </div>
 
       {showRegister && (

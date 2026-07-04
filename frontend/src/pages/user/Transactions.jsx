@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import StatusBadge from '../../components/common/StatusBadge'
 import ReceiptView, { buildPrintHTML } from '../../components/common/ReceiptView'
+import Pagination from '../../components/common/Pagination'
 
 export default function UserTransactions() {
   const [transactions, setTransactions] = useState([])
@@ -14,6 +15,8 @@ export default function UserTransactions() {
   const [receipt, setReceipt] = useState(null)
   const [receiptData, setReceiptData] = useState(null)
   const [receiptLoading, setReceiptLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const buildUrl = () => {
     const params = new URLSearchParams()
@@ -145,6 +148,10 @@ export default function UserTransactions() {
     setReceiptLoading(false)
   }
 
+  const paginatedTransactions = useMemo(() => transactions.slice((currentPage - 1) * pageSize, currentPage * pageSize), [transactions, currentPage, pageSize])
+
+  useEffect(() => { setCurrentPage(1) }, [transactions.length])
+
   const handleViewReceipt = () => {
     if (!receiptData) return
     const w = window.open('', '_blank')
@@ -230,7 +237,7 @@ export default function UserTransactions() {
             {loading ? (
               <tr><td colSpan="6"><div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div></td></tr>
             ) : transactions.length > 0 ? (
-              transactions.map((txn, i) => (
+              paginatedTransactions.map((txn, i) => (
                 <tr key={i} onClick={() => { setReceipt(txn); fetchReceipt(txn); }} style={{ cursor: 'pointer' }}>
                   <td className="text-muted">{formatDateTime(txn.created_at)}</td>
                   <td className="mono">{txn.account?.account_number}</td>
@@ -254,6 +261,7 @@ export default function UserTransactions() {
             )}
           </tbody>
         </table>
+        <Pagination currentPage={currentPage} totalItems={transactions.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
       </div>
 
       {receipt && (

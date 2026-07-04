@@ -40,7 +40,6 @@ export default function UserMyLoans() {
   const [payAmount, setPayAmount] = useState('')
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
-
   const loadData = () => {
     setLoading(true)
     const promises = []
@@ -278,12 +277,159 @@ export default function UserMyLoans() {
     )
   }
 
+  const totalDisbursed = loans.reduce((s, l) => s + (l.status === 'approved' ? parseFloat(l.amount) : 0), 0)
+
   return (
     <>
+      <style>{`
+        .al-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .al-kpi-card {
+          background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e);
+          border-radius: 14px; padding: 18px 20px; display: flex; align-items: center; gap: 14px;
+          transition: all 0.2s;
+        }
+        .al-kpi-card:hover { border-color: rgba(59,130,246,0.2); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+        .al-kpi-icon {
+          width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .al-kpi-icon .mat-icon { font-size: 22px; }
+        .al-kpi-info { display: flex; flex-direction: column; gap: 1px; }
+        .al-kpi-value { font-size: 22px; font-weight: 800; line-height: 1.2; letter-spacing: -0.3px; }
+        .al-kpi-label { font-size: 12px; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.4px; }
+
+        .al-overdue-banner {
+          display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+          background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
+          border-radius: 12px; margin-bottom: 20px; color: #ef4444;
+        }
+        .al-overdue-banner .mat-icon { font-size: 20px; flex-shrink: 0; }
+        .al-overdue-banner span { font-size: 13px; font-weight: 600; }
+
+        .al-loan-card {
+          background: var(--card-bg,#1a1f2e); border: 1px solid var(--border-color,#2a2f3e);
+          border-radius: 16px; overflow: hidden; margin-bottom: 18px;
+          transition: all 0.25s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .al-loan-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.18); }
+        .al-loan-card.overdue { border-color: rgba(239,68,68,0.3); }
+
+        .al-card-top {
+          padding: 22px 26px 16px; display: flex; align-items: flex-start; gap: 20px;
+          border-bottom: 1px solid rgba(55,65,81,0.12);
+        }
+        .al-card-icon {
+          width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .al-card-icon .mat-icon { font-size: 26px; }
+        .al-card-info { flex: 1; min-width: 0; }
+        .al-card-number { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary,#fff); letter-spacing: 0.3px; }
+        .al-card-meta { font-size: 13px; color: var(--text-secondary,#94a3b8); margin-top: 3px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .al-card-meta-sep { color: rgba(148,163,184,0.3); }
+        .al-card-right { text-align: right; flex-shrink: 0; }
+        .al-card-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+        }
+        .al-card-badge .mat-icon { font-size: 10px; }
+        .al-card-date { font-size: 11px; color: var(--text-muted,#64748b); margin-top: 4px; }
+
+        .al-card-body { padding: 18px 26px 20px; }
+        .al-card-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+        .al-card-stat {
+          background: rgba(0,0,0,0.08); border-radius: 10px; padding: 12px 14px;
+        }
+        .al-card-stat-label { font-size: 11px; color: var(--text-secondary,#94a3b8); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+        .al-card-stat-value { font-size: 16px; font-weight: 700; color: var(--text-primary,#fff); }
+        .al-card-stat-value.accent { color: var(--accent-color,#3b82f6); }
+        .al-card-stat-value.success { color: #10b981; }
+        .al-card-stat-value.danger { color: #ef4444; }
+        .al-card-stat-value.warning { color: #f59e0b; }
+        .al-card-stat-sub { font-size: 11px; color: var(--text-muted,#64748b); margin-top: 2px; }
+
+        .al-card-progress { margin-bottom: 16px; }
+        .al-card-progress-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary,#94a3b8); margin-bottom: 6px; }
+        .al-card-progress-header strong { color: var(--text-primary,#fff); }
+        .al-card-progress-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
+        .al-card-progress-fill { height: 100%; border-radius: 6px; transition: width 0.8s ease; }
+
+        .al-card-footer {
+          display: flex; align-items: center; justify-content: space-between; gap: 12px;
+          padding-top: 16px; border-top: 1px solid rgba(55,65,81,0.1);
+        }
+        .al-card-footer-left { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-secondary,#94a3b8); }
+        .al-card-footer-left .mat-icon { font-size: 14px; }
+        .al-card-footer-left strong { color: var(--text-primary,#fff); }
+        .al-card-actions { display: flex; gap: 8px; }
+        .al-card-actions .btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; }
+        .al-card-actions .btn .mat-icon { font-size: 16px; }
+
+        .al-repayment-toggle {
+          background: none; border: none; color: var(--accent-color,#3b82f6); cursor: pointer;
+          font-size: 12px; display: flex; align-items: center; gap: 4px; padding: 4px 0;
+        }
+        .al-repayment-toggle .mat-icon { font-size: 14px; transition: transform 0.2s; }
+        .al-repayment-toggle.open .mat-icon { transform: rotate(90deg); }
+
+        .al-repayment-table { margin-top: 12px; border-top: 1px solid rgba(55,65,81,0.1); padding-top: 12px; }
+        .al-repayment-table-header {
+          display: grid; grid-template-columns: 2fr 1fr 1.5fr 1fr;
+          gap: 8px; padding: 8px 12px; font-size: 11px; color: var(--text-muted,#64748b);
+          text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+        }
+        .al-repayment-table-row {
+          display: grid; grid-template-columns: 2fr 1fr 1.5fr 1fr;
+          gap: 8px; padding: 8px 12px; font-size: 13px; border-radius: 6px;
+          transition: background 0.1s;
+        }
+        .al-repayment-table-row:hover { background: rgba(255,255,255,0.02); }
+        .al-repayment-table-row .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .al-repayment-table-row .amount { font-weight: 600; color: var(--text-primary,#fff); }
+        .al-repayment-table-row .status-badge {
+          font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 12px;
+          text-transform: uppercase; letter-spacing: 0.3px; width: fit-content;
+        }
+        .al-repayment-table-row .status-badge.paid { background: rgba(16,185,129,0.12); color: #10b981; }
+        .al-repayment-table-row .status-badge.pending { background: rgba(245,158,11,0.12); color: #f59e0b; }
+
+        @media (max-width: 900px) {
+          .al-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .al-card-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 600px) {
+          .al-kpi-grid { grid-template-columns: 1fr; }
+          .al-card-stats { grid-template-columns: 1fr 1fr; }
+          .al-card-top { flex-direction: column; }
+          .al-card-footer { flex-direction: column; align-items: stretch; }
+          .al-card-actions { justify-content: stretch; }
+          .al-card-actions .btn { flex: 1; }
+        }
+
+        .modal-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+          display: flex; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal {
+          background: #151a22; border: 1px solid var(--border-color);
+          border-radius: 12px; width: 100%; max-width: 440px; padding: 0;
+        }
+        .modal-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 18px 24px; border-bottom: 1px solid var(--border-color);
+        }
+        .modal-header h2 { margin: 0; font-size: 1.1rem; color: #fff; }
+        .modal-close {
+          background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px;
+        }
+        .modal-close:hover { color: #fff; }
+        .modal-body { padding: 24px; }
+      `}</style>
+
       <div className="page-header">
         <div>
-          <div className="page-title">Active Loans</div>
-          <div className="page-subtitle">Manage your active loans, repayments and track progress.</div>
+          <div className="page-title">My Loans</div>
+          <div className="page-subtitle">Active loans, repayment tracking and loan management dashboard.</div>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/user/loans/apply-wizard')}>
           <span className="material-symbols-rounded">add</span>
@@ -292,134 +438,215 @@ export default function UserMyLoans() {
       </div>
 
       {loading ? (
-        <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading...</div></div>
+        <div className="empty"><span className="material-symbols-rounded">sync</span><div>Loading your loan portfolio...</div></div>
       ) : loans.length > 0 ? (
         <>
+          {/* KPI Cards */}
+          <div className="al-kpi-grid">
+            <div className="al-kpi-card">
+              <div className="al-kpi-icon" style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+                <span className="material-symbols-rounded mat-icon">account_balance</span>
+              </div>
+              <div className="al-kpi-info">
+                <div className="al-kpi-value" style={{ color: '#3b82f6' }}>{loans.length}</div>
+                <div className="al-kpi-label">Total Loans</div>
+              </div>
+            </div>
+            <div className="al-kpi-card">
+              <div className="al-kpi-icon" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                <span className="material-symbols-rounded mat-icon">check_circle</span>
+              </div>
+              <div className="al-kpi-info">
+                <div className="al-kpi-value" style={{ color: '#10b981' }}>{activeLoans.length}</div>
+                <div className="al-kpi-label">Active</div>
+              </div>
+            </div>
+            <div className="al-kpi-card">
+              <div className="al-kpi-icon" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>
+                <span className="material-symbols-rounded mat-icon">warning</span>
+              </div>
+              <div className="al-kpi-info">
+                <div className="al-kpi-value" style={{ color: '#ef4444' }}>{overdueCount}</div>
+                <div className="al-kpi-label">Overdue</div>
+              </div>
+            </div>
+            <div className="al-kpi-card">
+              <div className="al-kpi-icon" style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                <span className="material-symbols-rounded mat-icon">payments</span>
+              </div>
+              <div className="al-kpi-info">
+                <div className="al-kpi-value" style={{ color: '#8b5cf6', fontSize: '18px' }}>{formatCurrency(totalDisbursed)}</div>
+                <div className="al-kpi-label">Total Disbursed</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Overdue Alert */}
           {overdueCount > 0 && (
-            <div className="badge badge-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '0.9rem', textTransform: 'none', letterSpacing: '0', fontWeight: 500, width: 'fit-content' }}>
+            <div className="al-overdue-banner">
               <span className="material-symbols-rounded">warning</span>
-              You have {overdueCount} overdue loan{overdueCount > 1 ? 's' : ''}. Please make payments immediately.
+              <span>You have {overdueCount} overdue loan{overdueCount > 1 ? 's' : ''}. Please make payments immediately to avoid penalties.</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>Active Loans</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <span className="badge badge-info" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>{loans.length} Total</span>
-              <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>{activeLoans.length} Active</span>
-            </div>
-          </div>
+          {/* Loan Cards */}
+          {loans.map(loan => {
+            const paid = parseFloat(loan.total_paid)
+            const total = parseFloat(loan.total_payable)
+            const remaining = total - paid
+            const progress = calculateProgress(paid, total)
+            const remainingEmis = loan.remaining_emis || (loan.emi > 0 ? Math.ceil(remaining / parseFloat(loan.emi)) : 0)
+            const canPay = loan.status === 'approved' && remaining > 0
+            const statusColor = loan.is_overdue ? '#ef4444' : loan.status === 'approved' ? '#10b981' : loan.status === 'fully_paid' ? '#6366f1' : '#94a3b8'
+            const statusIcon = loan.is_overdue ? 'warning' : loan.status === 'approved' ? 'check_circle' : loan.status === 'fully_paid' ? 'verified' : 'circle'
+            const statusLabel = loan.is_overdue ? 'Overdue' : loan.status === 'fully_paid' ? 'Fully Paid' : 'Active'
 
-          <div className="grid grid-2">
-            {loans.map(loan => {
-              const isActive = loan.status === 'approved' || loan.status === 'fully_paid'
-              const paid = parseFloat(loan.total_paid)
-              const total = parseFloat(loan.total_payable)
-              const remaining = total - paid
-              const progress = calculateProgress(paid, total)
-              const remainingEmis = loan.remaining_emis || (loan.emi > 0 ? Math.ceil(remaining / parseFloat(loan.emi)) : 0)
-              const status = loan.is_overdue ? 'overdue' : loan.status
-              const canPay = loan.status === 'approved' && remaining > 0
-
-              if (isActive) {
-                return (
-                  <div className="loan-card" key={loan.id} style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
-                    <div className="loan-head">
-                      <div>
-                        <div className="loan-num">{loan.loan_number}</div>
-                        <div className="text-muted" style={{ fontSize: '12px', marginTop: '2px' }}>
-                          Principal &middot; {formatCurrency(loan.amount)} &middot; {loan.interest_rate}% p.a.
-                        </div>
-                      </div>
-                      <span className={`badge ${status === 'overdue' ? 'badge-danger' : status === 'approved' ? 'badge-success' : 'badge-muted'}`}>{status}</span>
-                    </div>
-
-                    <div className="loan-grid">
-                      <div className="loan-stat">
-                        <div className="label">EMI</div>
-                        <div className="value">{formatCurrency(loan.emi)}/mo</div>
-                      </div>
-                      <div className="loan-stat">
-                        <div className="label">Paid</div>
-                        <div className="value">{formatCurrency(paid)}</div>
-                      </div>
-                      <div className="loan-stat">
-                        <div className="label">Remaining</div>
-                        <div className="value">{formatCurrency(Math.max(0, remaining))}</div>
-                      </div>
-                    </div>
-
-                    <div className="loan-progress-meta">
-                      <span>Repaid {formatCurrency(paid)} / {formatCurrency(total)}</span>
-                      <span><strong>{progress}%</strong> &middot; {remainingEmis} EMIs left</span>
-                    </div>
-                    <div className="progress">
-                      <div className={`progress-bar ${loan.status === 'fully_paid' ? 'success' : ''}`}
-                        style={{ width: `${progress}%`, background: loan.is_overdue ? 'var(--danger)' : '' }} />
-                    </div>
-
-                    {canPay && (
-                      <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} onClick={() => openPayModal(loan)}>
-                        <span className="material-symbols-rounded">payments</span>
-                        Pay EMI
-                      </button>
-                    )}
-
-                    {loan.repayments?.length > 0 && (
-                      <details style={{ marginTop: '12px' }}>
-                        <summary style={{ fontSize: '0.8rem', color: 'var(--accent-color)', cursor: 'pointer' }}>
-                          View Repayment History ({loan.repayments.length})
-                        </summary>
-                        <div style={{ marginTop: '8px' }}>
-                          {loan.repayments.map(r => (
-                            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>EMI-{r.emi_number || '\u2014'}</span>
-                              <span style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(r.amount)}</span>
-                              <span style={{ color: 'var(--text-secondary)' }}>{formatDate(r.repayment_date)}</span>
-                              <span className={`badge ${r.status === 'paid' ? 'badge-success' : 'badge-muted'}`}>{r.status || 'paid'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
+            return (
+              <div key={loan.id} className={`al-loan-card${loan.is_overdue ? ' overdue' : ''}`}>
+                {/* Card Header */}
+                <div className="al-card-top">
+                  <div className="al-card-icon" style={{ background: `${statusColor}18`, color: statusColor }}>
+                    <span className="material-symbols-rounded mat-icon">{statusIcon}</span>
                   </div>
-                )
-              }
-
-              return (
-                <div className="loan-card" key={loan.id}>
-                  <div className="loan-head">
-                    <div>
-                      <div className="loan-num">{loan.loan_number}</div>
-                      <div className="text-muted" style={{ fontSize: '12px', marginTop: '2px' }}>
-                        Principal &middot; {formatCurrency(loan.amount)} &middot; {loan.interest_rate}% p.a.
-                      </div>
+                  <div className="al-card-info">
+                    <div className="al-card-number">{loan.loan_number}</div>
+                    <div className="al-card-meta">
+                      <span>Principal {formatCurrency(loan.amount)}</span>
+                      <span className="al-card-meta-sep">&middot;</span>
+                      <span>{loan.interest_rate}% p.a.</span>
+                      <span className="al-card-meta-sep">&middot;</span>
+                      <span>{loan.duration_months} months</span>
                     </div>
-                    <span className={`badge ${status === 'overdue' ? 'badge-danger' : status === 'approved' ? 'badge-success' : 'badge-muted'}`}>{loan.status}</span>
                   </div>
-                  <div className="loan-grid">
-                    <div className="loan-stat">
-                      <div className="label">Interest</div>
-                      <div className="value">{loan.interest_rate}%</div>
-                    </div>
-                    <div className="loan-stat">
-                      <div className="label">EMI</div>
-                      <div className="value">{formatCurrency(loan.emi)}</div>
-                    </div>
-                    <div className="loan-stat">
-                      <div className="label">Total</div>
-                      <div className="value">{formatCurrency(loan.total_payable)}</div>
+                  <div className="al-card-right">
+                    <span className="al-card-badge" style={{ background: `${statusColor}18`, color: statusColor }}>
+                      <span className="material-symbols-rounded mat-icon">circle</span>
+                      {statusLabel}
+                    </span>
+                    <div className="al-card-date">
+                      {loan.approved_date ? `Approved ${formatDate(loan.approved_date)}` : `Applied ${formatDate(loan.applied_date)}`}
                     </div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
+
+                {/* Card Body */}
+                <div className="al-card-body">
+                  {/* Stats Grid */}
+                  <div className="al-card-stats">
+                    <div className="al-card-stat">
+                      <div className="al-card-stat-label">Monthly EMI</div>
+                      <div className="al-card-stat-value accent">{formatCurrency(loan.emi)}</div>
+                      <div className="al-card-stat-sub">Per month</div>
+                    </div>
+                    <div className="al-card-stat">
+                      <div className="al-card-stat-label">Outstanding</div>
+                      <div className="al-card-stat-value warning">{formatCurrency(Math.max(0, remaining))}</div>
+                      <div className="al-card-stat-sub">Remaining balance</div>
+                    </div>
+                    <div className="al-card-stat">
+                      <div className="al-card-stat-label">Total Paid</div>
+                      <div className="al-card-stat-value success">{formatCurrency(paid)}</div>
+                      <div className="al-card-stat-sub">Of {formatCurrency(total)}</div>
+                    </div>
+                    <div className="al-card-stat">
+                      <div className="al-card-stat-label">EMIs Left</div>
+                      <div className="al-card-stat-value">{remainingEmis}</div>
+                      <div className="al-card-stat-sub">Remaining installments</div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="al-card-progress">
+                    <div className="al-card-progress-header">
+                      <span>Repayment <strong>{progress}%</strong></span>
+                      <span><strong>{formatCurrency(paid)}</strong> repaid / <strong>{formatCurrency(total)}</strong></span>
+                    </div>
+                    <div className="al-card-progress-track">
+                      <div className="al-card-progress-fill" style={{
+                        width: `${progress}%`,
+                        background: loan.is_overdue ? '#ef4444' : progress >= 100 ? '#10b981' : 'linear-gradient(90deg, #3b82f6, #6366f1)'
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Footer with Payment Info and Actions */}
+                  <div className="al-card-footer">
+                    <div className="al-card-footer-left">
+                      {loan.last_payment_date && (
+                        <>
+                          <span className="material-symbols-rounded mat-icon">calendar_month</span>
+                          Last payment <strong>{formatDate(loan.last_payment_date)}</strong>
+                          <span className="al-card-meta-sep">|</span>
+                        </>
+                      )}
+                      <span className="material-symbols-rounded mat-icon">receipt_long</span>
+                      EMI <strong>{formatCurrency(loan.emi)}</strong>/mo
+                    </div>
+                    <div className="al-card-actions">
+                      {canPay && (
+                        <button className="btn btn-primary" onClick={() => openPayModal(loan)}>
+                          <span className="material-symbols-rounded">payments</span>
+                          Pay EMI
+                        </button>
+                      )}
+                      {loan.repayments?.length > 0 && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            const el = document.getElementById(`repay-toggle-${loan.id}`)
+                            if (el) el.click()
+                          }}
+                        >
+                          <span className="material-symbols-rounded">history</span>
+                          History
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Repayment History */}
+                  {loan.repayments?.length > 0 && (
+                    <details style={{ marginTop: '4px' }}>
+                      <summary
+                        id={`repay-toggle-${loan.id}`}
+                        className="al-repayment-toggle"
+                        style={{ listStyle: 'none', cursor: 'pointer' }}
+                      >
+                        <span className="material-symbols-rounded mat-icon">chevron_right</span>
+                        Repayment History ({loan.repayments.length})
+                      </summary>
+                      <div className="al-repayment-table">
+                        <div className="al-repayment-table-header">
+                          <span>EMI</span>
+                          <span>Amount</span>
+                          <span>Date</span>
+                          <span>Status</span>
+                        </div>
+                        {loan.repayments.map(r => (
+                          <div key={r.id} className="al-repayment-table-row">
+                            <span className="mono">EMI-{r.emi_number || '\u2014'}</span>
+                            <span className="amount">{formatCurrency(r.amount)}</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{formatDate(r.repayment_date)}</span>
+                            <span>
+                              <span className={`status-badge ${r.status === 'paid' ? 'paid' : 'pending'}`}>
+                                {r.status || 'paid'}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </>
       ) : (
-        <div className="empty"><span className="material-symbols-rounded">request_quote</span><div>You don't have any active loans.</div></div>
+        <div className="empty"><span className="material-symbols-rounded">request_quote</span><div>You {'don\'t'} have any active loans yet.</div></div>
       )}
 
+      {/* Pay EMI Modal */}
       {payingLoan && (
         <div className="modal-overlay" onClick={closePayModal}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -457,27 +684,6 @@ export default function UserMyLoans() {
           </div>
         </div>
       )}
-
-      <style>{`
-        .modal-overlay {
-          position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-          display: flex; align-items: center; justify-content: center; z-index: 1000;
-        }
-        .modal {
-          background: #151a22; border: 1px solid var(--border-color);
-          border-radius: 12px; width: 100%; max-width: 440px; padding: 0;
-        }
-        .modal-header {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 18px 24px; border-bottom: 1px solid var(--border-color);
-        }
-        .modal-header h2 { margin: 0; font-size: 1.1rem; color: #fff; }
-        .modal-close {
-          background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px;
-        }
-        .modal-close:hover { color: #fff; }
-        .modal-body { padding: 24px; }
-      `}</style>
     </>
   )
 }

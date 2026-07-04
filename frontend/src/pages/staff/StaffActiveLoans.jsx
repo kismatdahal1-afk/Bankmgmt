@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import Pagination from '../../components/common/Pagination'
 
 export default function StaffActiveLoans() {
   const navigate = useNavigate()
   const [loans, setLoans] = useState([])
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     api.get('/loans')
@@ -15,9 +18,12 @@ export default function StaffActiveLoans() {
       .finally(() => setLoading(false))
   }, [])
 
-  const activeLoans = loans.filter(l => ['approved', 'active', 'disbursed'].includes(l.status))
-  const overdueLoans = loans.filter(l => l.is_overdue)
-  const completedLoans = loans.filter(l => l.status === 'fully_paid' || l.status === 'closed')
+  const paginatedLoans = useMemo(() => loans.slice((currentPage - 1) * pageSize, currentPage * pageSize), [loans, currentPage, pageSize])
+  const activeLoans = paginatedLoans.filter(l => ['approved', 'active', 'disbursed'].includes(l.status))
+  const overdueLoans = paginatedLoans.filter(l => l.is_overdue)
+  const completedLoans = paginatedLoans.filter(l => l.status === 'fully_paid' || l.status === 'closed')
+
+  useEffect(() => { setCurrentPage(1) }, [loans.length])
 
   if (loading) return <div className="loading-skeleton"><div className="skeleton-card" /><div className="skeleton-card" /></div>
 
@@ -105,6 +111,7 @@ export default function StaffActiveLoans() {
           <div className="table-container">{renderTable(completedLoans)}</div>
         </div>
       )}
+      <Pagination currentPage={currentPage} totalItems={loans.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
     </>
   )
 }
