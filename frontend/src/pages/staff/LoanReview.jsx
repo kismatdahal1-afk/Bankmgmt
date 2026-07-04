@@ -196,20 +196,6 @@ export default function StaffLoanReview() {
         .sr-qi-badge { font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 20px; letter-spacing: 0.3px; }
       `}</style>
 
-      <div className="page-header">
-        <div>
-          <div className="page-title">Application Review</div>
-          <div className="page-subtitle">
-            <span className="mono">{app.application_number}</span>
-            <span style={{ margin: '0 8px', color: 'var(--text-muted)' }}>&middot;</span>
-            {app.customer_name}
-          </div>
-        </div>
-        <button className="btn btn-secondary" onClick={() => navigate(-1)}>
-          <span className="material-symbols-rounded">arrow_back</span> Back
-        </button>
-      </div>
-
       {msg.text && (
         <div className={`flash-message flash-${msg.type}`} style={{ marginBottom: '16px' }}>
           <span className="material-symbols-rounded" style={{ verticalAlign: 'middle', marginRight: '6px' }}>
@@ -219,19 +205,63 @@ export default function StaffLoanReview() {
         </div>
       )}
 
-      {/* Quick Info Bar */}
-      <div className="sr-quick-info" style={{ marginBottom: '16px' }}>
-        <div className="sr-qi-icon" style={{ background: `${statusColor}18`, color: statusColor }}>
-          <span className="material-symbols-rounded mat-icon">account_balance</span>
+      {/* HERO HEADER — same style as admin */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.05) 100%)',
+        border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius)',
+        padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden'
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, var(--accent-color), #8b5cf6, #10b981)' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => navigate(-1)} style={{ padding: '4px 10px' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>arrow_back</span>
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Application Review</span>
+              <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{app.application_number}</span>
+            </div>
+          </div>
+          <span style={{
+            fontSize: 13, padding: '6px 18px', borderRadius: 20, fontWeight: 700, letterSpacing: '0.3px',
+            background: `${statusColor}18`, color: statusColor
+          }}>{app.status.replace(/_/g, ' ')}</span>
         </div>
-        <div className="sr-qi-info">
-          <div className="sr-qi-id">{app.application_number}</div>
-          <div className="sr-qi-name">{app.customer_name}</div>
-          <div className="sr-qi-meta">{app.loan_type} &middot; {app.duration_months} months &middot; {formatCurrency(app.amount)}</div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px 24px',
+          marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color)'
+        }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>person</span> Customer
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.customer_phone || '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>payments</span> Loan Type
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.loan_type}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>Rs</span> Amount
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.amount && app.interest_rate && app.duration_months
+              ? (() => { const mr = (app.interest_rate / 12) / 100; const n = app.duration_months; const p = app.amount; return p * mr * Math.pow(1 + mr, n) / (Math.pow(1 + mr, n) - 1) || 0 })()
+              : 0)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>assignment_ind</span> Assigned To
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.assigned_staff_name || 'Unassigned'}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
+          </div>
         </div>
-        <span className="sr-qi-badge" style={{ background: `${statusColor}18`, color: statusColor }}>
-          {app.status.replace(/_/g, ' ')}
-        </span>
       </div>
 
       <div className="sr-layout">

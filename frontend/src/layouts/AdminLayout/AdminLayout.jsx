@@ -55,7 +55,7 @@ export default function AdminLayout() {
               <div className="nav-children">
                 <div className={`nav-children-inner ${loanOpen ? 'open' : ''}`}>
                   {loanLinks.map(l => (
-                    <NavLink key={l.to} to={l.to} end className={({ isActive }) => isActive ? 'active' : ''}>
+                    <NavLink key={l.to} to={l.to} end={l.to !== '/admin/loan/applications'} className={({ isActive }) => isActive ? 'active' : ''}>
                       <span className="material-symbols-rounded" style={{ fontSize: '18px' }}>{l.icon}</span>
                       {l.label}
                     </NavLink>

@@ -146,6 +146,26 @@ export default function AdminLoanReview() {
 
   const app = data.application || data
   const customer = data.customer || {}
+  const profile = {
+    full_name: customer.full_name || app.customer_name,
+    father_name: customer.father_name || app.father_name,
+    grandfather_name: customer.grandfather_name || app.grandfather_name,
+    dob: customer.dob || app.dob,
+    gender: customer.gender || app.gender,
+    citizenship_id: customer.citizenship_id || app.citizenship_number,
+    citizenship_issue_district: customer.citizenship_issue_district || app.citizenship_issue_district,
+    marital_status: customer.marital_status || app.marital_status,
+    occupation: customer.occupation || app.occupation,
+    phone_number: customer.phone_number || app.customer_phone,
+    alternate_mobile: customer.alternate_mobile || app.alternate_mobile,
+    email: customer.email || app.customer_email,
+    address: customer.address || app.customer_address,
+    temporary_address: customer.temporary_address || app.current_address,
+    nominee_name: customer.nominee_name || app.nominee_name,
+    nominee_relationship: customer.nominee_relationship || app.nominee_relationship,
+    nominee_contact: customer.nominee_contact || app.nominee_contact,
+  }
+  const accountsList = data.accounts || []
   const riskLevel = app.amount > 1000000 ? 'high' : app.amount > 500000 ? 'medium' : 'low'
   const existingLoans = (data.existing_loans || []).filter(l => l.status === 'approved')
   const totalExistingDebt = existingLoans.reduce((s, l) => s + l.amount, 0)
@@ -161,30 +181,23 @@ export default function AdminLoanReview() {
   return (
     <>
       <style>{`
-        .lrr-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
-        .lrr-header-left { display: flex; flex-direction: column; gap: 8px; }
-        .lrr-header-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .lrr-header-top h1 { margin: 0; font-size: 1.4rem; color: #fff; }
-        .lrr-header-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
-        .lrr-header-meta span { display: flex; align-items: center; gap: 4px; }
-        .lrr-header-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
         .lrr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .lrr-info-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 20px; }
-        .lrr-info-card-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .lrr-info-card-title { font-size: 13px; font-weight: 800; color: #d4dbe5; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .lrr-info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); gap: 12px; }
         .lrr-info-row:last-child { border-bottom: none; }
-        .lrr-info-label { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .lrr-info-label { font-size: 13px; font-weight: 600; color: #b4c2d0; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
         .lrr-info-value { font-size: 13px; color: var(--text-primary); font-weight: 600; text-align: right; }
         .lrr-docs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
         .lrr-doc-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; }
         .lrr-doc-preview { height: 160px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; }
         .lrr-doc-preview img { width: 100%; height: 100%; object-fit: cover; }
-        .lrr-doc-preview .fallback { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
+        .lrr-doc-preview .fallback { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #b4c2d0; }
         .lrr-doc-body { padding: 12px 14px; }
         .lrr-doc-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-        .lrr-doc-meta { font-size: 11px; color: var(--text-muted); }
+        .lrr-doc-meta { font-size: 12px; font-weight: 500; color: #b4c2d0; }
         .lrr-doc-actions { display: flex; gap: 6px; margin-top: 10px; }
-        .lrr-doc-missing { height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); background: var(--bg-secondary); }
+        .lrr-doc-missing { height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #b4c2d0; background: var(--bg-secondary); }
         .lrr-timeline { display: flex; flex-direction: column; gap: 0; padding: 8px 0 4px; position: relative; }
         .lrr-tl-item { display: flex; gap: 18px; position: relative; padding-bottom: 0; }
         .lrr-tl-line { position: absolute; left: 17px; top: 38px; bottom: 0; width: 2px; }
@@ -196,10 +209,10 @@ export default function AdminLoanReview() {
         .lrr-tl-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
         .lrr-tl-card-header .mat-icon { font-size: 16px; }
         .lrr-tl-card-title { font-size: 14px; font-weight: 700; }
-        .lrr-tl-card-details { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+        .lrr-tl-card-details { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; font-weight: 500; color: #c8d4e0; margin-bottom: 6px; }
         .lrr-tl-card-details span { display: flex; align-items: center; gap: 4px; }
-        .lrr-tl-card-details .mat-icon { font-size: 14px; color: var(--text-secondary); }
-        .lrr-tl-remark { font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.5; background: rgba(0,0,0,0.12); padding: 8px 12px; border-radius: 8px; margin-top: 4px; }
+        .lrr-tl-card-details .mat-icon { font-size: 14px; color: #b4c2d0; }
+        .lrr-tl-remark { font-size: 12px; font-weight: 500; color: #c8d4e0; white-space: pre-wrap; line-height: 1.5; background: rgba(0,0,0,0.12); padding: 8px 12px; border-radius: 8px; margin-top: 4px; }
         .lrr-tl-clarification { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.05); }
         .lrr-tl-clarification .lrr-tl-card-title { color: #f59e0b; }
         .lrr-tl-clarification .lrr-tl-card-header .mat-icon { color: #f59e0b; }
@@ -212,101 +225,237 @@ export default function AdminLoanReview() {
         .lrr-tl-activated { border-color: rgba(5,150,105,0.35); background: rgba(5,150,105,0.05); }
         .lrr-tl-activated .lrr-tl-card-title { color: #059669; }
         .lrr-tl-activated .lrr-tl-card-header .mat-icon { color: #059669; }
-        .lrr-tl-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
-        .lrr-summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-        .lrr-summary-item { display: flex; flex-direction: column; gap: 4px; }
-        .lrr-summary-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-        .lrr-summary-value { font-size: 14px; font-weight: 700; color: #fff; }
+        .lrr-tl-empty { padding: 24px; text-align: center; color: #b4c2d0; font-size: 13px; }
         .lrr-section-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; margin-bottom: 20px; }
         .lrr-section-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; cursor: pointer; user-select: none; }
         .lrr-section-header:hover { background: rgba(255,255,255,0.02); }
-        .lrr-section-header .mat-icon { font-size: 18px; color: var(--text-muted); transition: transform 0.2s; }
+        .lrr-section-header .mat-icon { font-size: 18px; color: #b4c2d0; transition: transform 0.2s; }
         .lrr-section-header .mat-icon.open { transform: rotate(180deg); }
         .lrr-section-body { padding: 0 20px 16px; }
         .lrr-decision-bar { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 20px; margin-top: 20px; }
         .lrr-decision-bar-inner { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
         .lrr-decision-actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .lrr-decision-remarks { flex: 1; min-width: 250px; }
-        @media (max-width: 900px) { .lrr-grid { grid-template-columns: 1fr; } .lrr-docs-grid { grid-template-columns: 1fr; } .lrr-header { flex-direction: column; } .lrr-decision-bar-inner { flex-direction: column; } }
+        @media (max-width: 900px) { .lrr-docs-grid { grid-template-columns: 1fr; } .lrr-header { flex-direction: column; } .lrr-decision-bar-inner { flex-direction: column; } }
+        .sr-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+        @media (max-width: 600px) { .sr-grid-2 { grid-template-columns: 1fr; } }
+        .sr-field { background: rgba(0,0,0,0.06); border-radius: 8px; padding: 10px 12px; }
+        .sr-field-label { font-size: 11px; color: #b4c2d0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .sr-field-value { font-size: 14px; font-weight: 600; color: #fff; margin-top: 3px; }
+        .sr-field-value.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
       `}</style>
 
       {/* FLASH MESSAGE */}
       {msg.text && <div className={`flash-message flash-${msg.type}`} style={{ marginBottom: 16 }}>{msg.text}</div>}
 
       {/* SECTION 1 — HEADER */}
-      <div className="lrr-header">
-        <div className="lrr-header-left">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <div className="lrr-hero" style={{
+        background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.05) 100%)',
+        border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius)',
+        padding: '24px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden'
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, var(--accent-color), #8b5cf6, #10b981)' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn btn-sm btn-secondary" onClick={() => navigate('/admin/loan/applications')} style={{ padding: '4px 10px' }}>
               <span className="material-symbols-rounded" style={{ fontSize: 16 }}>arrow_back</span>
             </button>
-            <h1>Loan Application Review</h1>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Loan Application Review</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{app.application_number}</span>
+                <span className={`badge ${STATUS_BADGE[app.status] || 'badge-muted'}`} style={{ fontSize: 11, padding: '3px 12px' }}>{STATUS_LABEL[app.status] || app.status}</span>
+              </div>
+            </div>
           </div>
-          <div className="lrr-header-top">
-            <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent-color)' }}>{app.application_number}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>{app.customer_name}</span>
-            <span className={`badge ${STATUS_BADGE[app.status] || 'badge-muted'}`}>{STATUS_LABEL[app.status] || app.status}</span>
-            <span className="la-prio" style={{
-              display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 5, fontSize: 10, fontWeight: 800,
-              textTransform: 'uppercase', letterSpacing: '0.4px',
-              background: riskLevel === 'high' ? 'rgba(239,68,68,0.12)' : riskLevel === 'medium' ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)',
-              color: riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981'
-            }}>{riskLevel.toUpperCase()}</span>
-          </div>
-          <div className="lrr-header-meta">
-            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>payments</span> {app.loan_type}</span>
-            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>currency_rupee</span> {formatCurrency(app.amount)}</span>
-            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>person</span> {app.assigned_staff_name || 'Unassigned'}</span>
-            <span><span className="material-symbols-rounded" style={{ fontSize: 14 }}>schedule</span> Updated {app.updated_at ? formatDate(app.updated_at) : '—'}</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+            {['visit_scheduled', 'final_review', 'documents_verified'].includes(app.status) && (
+              <>
+                <button className="btn btn-success" onClick={() => setAction('approve')} style={{ height: 36 }}>
+                  <span className="material-symbols-rounded">check_circle</span> Approve
+                </button>
+                <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }} style={{ height: 36 }}>
+                  <span className="material-symbols-rounded">cancel</span> Reject
+                </button>
+                <button className="btn btn-secondary" onClick={() => { setAction('return'); setRemarks('') }} style={{ height: 36 }}>
+                  <span className="material-symbols-rounded">undo</span> Clarification
+                </button>
+              </>
+            )}
+            {app.status === 'approved' && <span className="badge badge-success" style={{ fontSize: 13, padding: '8px 16px' }}>Approved {(() => { const e = sortedHistory.find(h => h.new_status === 'approved'); return e ? `${formatDate(e.changed_at)} | ${formatTime(e.changed_at)}` : app.approved_at ? formatDate(app.approved_at) : '' })()}</span>}
+            {app.status === 'rejected' && <span className="badge badge-danger" style={{ fontSize: 13, padding: '8px 16px' }}>Rejected {(() => { const e = sortedHistory.find(h => h.new_status === 'rejected'); return e ? `${formatDate(e.changed_at)} | ${formatTime(e.changed_at)}` : app.rejected_at ? formatDate(app.rejected_at) : '' })()}</span>}
           </div>
         </div>
-        <div className="lrr-header-actions">
-          {['visit_scheduled', 'final_review', 'documents_verified'].includes(app.status) && (
-            <>
-              <button className="btn btn-success" onClick={() => setAction('approve')}>
-                <span className="material-symbols-rounded">check_circle</span> Approve
-              </button>
-              <button className="btn btn-danger" onClick={() => { setAction('reject'); setRemarks('') }}>
-                <span className="material-symbols-rounded">cancel</span> Reject
-              </button>
-              <button className="btn btn-secondary" onClick={() => { setAction('return'); setRemarks('') }}>
-                <span className="material-symbols-rounded">undo</span> Clarification
-              </button>
-            </>
-          )}
-          {app.status === 'approved' && <span className="badge badge-success" style={{ fontSize: 13, padding: '8px 16px' }}>Approved {app.approved_at ? formatDate(app.approved_at) : ''}</span>}
-          {app.status === 'rejected' && <span className="badge badge-danger" style={{ fontSize: 13, padding: '8px 16px' }}>Rejected {app.rejected_at ? formatDate(app.rejected_at) : ''}</span>}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px 24px',
+          marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color)'
+        }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>person</span> Customer
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.customer_name}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{customer.phone_number || app.customer_phone || '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>payments</span> Loan Type
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.loan_type}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>{app.duration_months} months @ {app.interest_rate}%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>Rs</span> Amount
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>EMI: {formatCurrency(app.emi || '—')}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>assignment_ind</span> Assigned To
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{app.assigned_staff_name || 'Unassigned'}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>Submitted {app.submitted_at ? formatDate(app.submitted_at) : '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b4c2d0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 13 }}>gavel</span> Risk Level
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                background: riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981'
+              }} />
+              <span style={{ color: riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981' }}>{riskLevel.toUpperCase()}</span>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#b4c2d0' }}>DTI: {dti}%</div>
+          </div>
         </div>
       </div>
 
-      {/* SECTION 2 + 3 — APPLICANT OVERVIEW + LOAN INFORMATION */}
-      <div className="lrr-grid">
-        <div className="lrr-info-card">
-          <div className="lrr-info-card-title">
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>person</span> Applicant Overview
+      {/* SECTION 2 + 3 — APPLICANT INFO (left) + LOAN / NOMINEE (right) — single card */}
+      <div className="lrr-info-card" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div>
+            <div className="lrr-info-card-title">
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>person</span> Applicant Information
+            </div>
+            <div className="sr-grid-2">
+              <div className="sr-field">
+                <div className="sr-field-label">Full Name</div>
+                <div className="sr-field-value">{profile.full_name || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Father Name</div>
+                <div className="sr-field-value">{profile.father_name || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Grandfather Name</div>
+                <div className="sr-field-value">{profile.grandfather_name || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Date of Birth</div>
+                <div className="sr-field-value">{profile.dob ? formatDate(profile.dob) : '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Gender</div>
+                <div className="sr-field-value">{profile.gender || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Citizenship Number</div>
+                <div className="sr-field-value mono">{profile.citizenship_id || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Citizenship Issue District</div>
+                <div className="sr-field-value">{profile.citizenship_issue_district || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Marital Status</div>
+                <div className="sr-field-value">{profile.marital_status || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Occupation</div>
+                <div className="sr-field-value">{profile.occupation || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Mobile Number</div>
+                <div className="sr-field-value">{profile.phone_number || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Alternate Mobile</div>
+                <div className="sr-field-value">{profile.alternate_mobile || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Email</div>
+                <div className="sr-field-value">{profile.email || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Permanent Address</div>
+                <div className="sr-field-value">{profile.address || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Current Address</div>
+                <div className="sr-field-value">{profile.temporary_address || profile.address || '—'}</div>
+              </div>
+            </div>
           </div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>badge</span> Full Name</span><span className="lrr-info-value">{customer.full_name || app.customer_name || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>credit_card</span> Citizenship</span><span className="lrr-info-value">{customer.citizenship_id || app.citizenship_number || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>call</span> Contact</span><span className="lrr-info-value">{customer.phone_number || app.customer_phone || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>mail</span> Email</span><span className="lrr-info-value">{customer.email || app.customer_email || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>home</span> Address</span><span className="lrr-info-value">{customer.address || app.customer_address || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>work</span> Occupation</span><span className="lrr-info-value">{customer.occupation || app.occupation || '—'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>payments</span> Monthly Income</span><span className="lrr-info-value" style={{ color: 'var(--success)' }}>{formatCurrency(monthlyIncome)}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label"><span className="material-symbols-rounded" style={{ fontSize: 14 }}>badge</span> Employment</span><span className="lrr-info-value">{customer.occupation || app.occupation || '—'}</span></div>
-        </div>
-
-        <div className="lrr-info-card">
-          <div className="lrr-info-card-title">
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>request_quote</span> Loan Information
+          <div>
+            <div className="lrr-info-card-title">
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>receipt_long</span> Loan Information
+            </div>
+            <div className="sr-grid-2" style={{ marginBottom: 18 }}>
+              <div className="sr-field">
+                <div className="sr-field-label">Loan Type</div>
+                <div className="sr-field-value">{app.loan_type}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Requested Amount</div>
+                <div className="sr-field-value" style={{ color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Duration</div>
+                <div className="sr-field-value">{app.duration_months} months</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Interest Rate</div>
+                <div className="sr-field-value">{app.interest_rate}% p.a.</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Estimated EMI</div>
+                <div className="sr-field-value" style={{ color: '#10b981' }}>{formatCurrency(app.emi || parseFloat(app.amount) * (1 + parseFloat(app.interest_rate || 12) / 100) / app.duration_months)}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Purpose</div>
+                <div className="sr-field-value">{app.purpose || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Collateral Type</div>
+                <div className="sr-field-value">{app.collateral_type || 'N/A'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Submitted</div>
+                <div className="sr-field-value" style={{ fontSize: '13px', color: '#b4c2d0' }}>{formatDate(app.submitted_at)}</div>
+              </div>
+            </div>
+            <div className="lrr-info-card-title">
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>groups</span> Nominee Information
+            </div>
+            <div className="sr-grid-2">
+              <div className="sr-field">
+                <div className="sr-field-label">Nominee Name</div>
+                <div className="sr-field-value">{profile.nominee_name || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Nominee Contact</div>
+                <div className="sr-field-value">{profile.nominee_contact || '—'}</div>
+              </div>
+              <div className="sr-field">
+                <div className="sr-field-label">Nominee Relationship</div>
+                <div className="sr-field-value">{profile.nominee_relationship || '—'}</div>
+              </div>
+            </div>
           </div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Loan Type</span><span className="lrr-info-value">{app.loan_type}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Requested Amount</span><span className="lrr-info-value" style={{ fontSize: '1.1rem', color: 'var(--accent-color)' }}>{formatCurrency(app.amount)}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Duration</span><span className="lrr-info-value">{app.duration_months} months</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Interest Rate</span><span className="lrr-info-value">{app.interest_rate}% p.a.</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Estimated EMI</span><span className="lrr-info-value" style={{ color: 'var(--accent-color)', fontWeight: 700 }}>{formatCurrency(app.emi || parseFloat(app.amount) * (1 + parseFloat(app.interest_rate || 12) / 100) / app.duration_months)}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Purpose</span><span className="lrr-info-value">{app.purpose || 'N/A'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Collateral</span><span className="lrr-info-value">{app.collateral_type || 'None'}</span></div>
-          <div className="lrr-info-row"><span className="lrr-info-label">Submitted On</span><span className="lrr-info-value">{app.submitted_at ? formatDate(app.submitted_at) : '—'}</span></div>
         </div>
       </div>
 
@@ -332,7 +481,7 @@ export default function AdminLoanReview() {
                     </>
                   ) : (
                     <div className="fallback">
-                      <span className="material-symbols-rounded" style={{ fontSize: 32, color: 'var(--text-muted)' }}>note_add</span>
+                      <span className="material-symbols-rounded" style={{ fontSize: 32, color: '#b4c2d0' }}>note_add</span>
                       <span style={{ fontSize: 11 }}>Not uploaded</span>
                     </div>
                   )}
@@ -352,7 +501,7 @@ export default function AdminLoanReview() {
                       </div>
                     </>
                   ) : (
-                    <div className="lrr-doc-meta" style={{ color: 'var(--text-muted)' }}>Not uploaded yet</div>
+                    <div className="lrr-doc-meta" style={{ color: '#b4c2d0' }}>Not uploaded yet</div>
                   )}
                 </div>
               </div>
@@ -364,7 +513,7 @@ export default function AdminLoanReview() {
       {/* SECTION 5 — APPLICATION DETAILS (Expandable) */}
       <div className="lrr-section-card">
         <div className="lrr-section-header" onClick={() => toggleSection('details')}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#d4dbe5', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="material-symbols-rounded" style={{ fontSize: 16 }}>description</span> Application Details
           </span>
           <span className={`material-symbols-rounded ${expandedSection === 'details' ? 'open' : ''}`}>expand_more</span>
@@ -449,31 +598,16 @@ export default function AdminLoanReview() {
         </div>
       </div>
 
-      {/* SECTION 7 — REVIEW SUMMARY */}
-      <div className="lrr-info-card" style={{ marginBottom: 20 }}>
-        <div className="lrr-info-card-title">
-          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>summarize</span> Review Summary
-        </div>
-        <div className="lrr-summary-grid">
-          <div className="lrr-summary-item"><span className="lrr-summary-label">Documents Submitted</span><span className="lrr-summary-value">{(app.documents || []).filter(d => DOC_LABELS[d.document_type]).length} / 3</span></div>
-          <div className="lrr-summary-item"><span className="lrr-summary-label">Staff Verification</span><span className="lrr-summary-value">{app.assigned_staff_name || 'Pending'}</span></div>
-          <div className="lrr-summary-item"><span className="lrr-summary-label">Status</span><span><span className={`badge ${STATUS_BADGE[app.status] || 'badge-muted'}`}>{STATUS_LABEL[app.status] || app.status}</span></span></div>
-          <div className="lrr-summary-item"><span className="lrr-summary-label">DTI Ratio</span><span className="lrr-summary-value" style={{ color: dti > 50 ? 'var(--danger)' : dti > 35 ? 'var(--warning)' : 'var(--success)' }}>{dti}%</span></div>
-          <div className="lrr-summary-item"><span className="lrr-summary-label">Risk Level</span><span className="lrr-summary-value" style={{ color: riskLevel === 'high' ? 'var(--danger)' : riskLevel === 'medium' ? 'var(--warning)' : 'var(--success)' }}>{riskLevel.toUpperCase()}</span></div>
-          <div className="lrr-summary-item"><span className="lrr-summary-label">Existing Debt</span><span className="lrr-summary-value">{formatCurrency(totalExistingDebt)}</span></div>
-        </div>
-      </div>
-
-      {/* SECTION 8 — ADMIN DECISION PANEL */}
+      {/* SECTION 7 — ADMIN DECISION PANEL */}
       <div className="lrr-decision-bar">
         <div className="lrr-decision-bar-inner">
           <div className="lrr-decision-remarks">
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Decision Remarks</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#d4dbe5', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Decision Remarks</div>
             <textarea className="form-control" rows={2} placeholder="Add internal remarks or notes..."
               value={remarks} onChange={e => setRemarks(e.target.value)} style={{ fontSize: 13 }} />
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Actions</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#d4dbe5', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Actions</div>
             <div className="lrr-decision-actions">
               {['visit_scheduled', 'final_review', 'documents_verified'].includes(app.status) ? (
                 <>
@@ -488,7 +622,7 @@ export default function AdminLoanReview() {
                   </button>
                 </>
               ) : (
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No actions available for current status</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#b4c2d0' }}>No actions available for current status</span>
               )}
             </div>
           </div>
@@ -504,9 +638,9 @@ export default function AdminLoanReview() {
                 {action === 'approve' ? 'Confirm Loan Approval' : action === 'reject' ? 'Confirm Rejection' : 'Return to Staff'}
               </div>
               {action === 'approve' ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>This will approve the loan, create the loan account, generate repayment schedule, and disburse funds to the customer's account.</p>
+                <p style={{ color: '#b4c2d0', fontSize: 13, margin: 0, fontWeight: 500 }}>This will approve the loan, create the loan account, generate repayment schedule, and disburse funds to the customer's account.</p>
               ) : (
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{action === 'reject' ? 'Rejection reason is required.' : 'Provide a reason for returning to staff.'}</p>
+                <p style={{ color: '#b4c2d0', fontSize: 13, margin: 0, fontWeight: 500 }}>{action === 'reject' ? 'Rejection reason is required.' : 'Provide a reason for returning to staff.'}</p>
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
