@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import PropTypes from 'prop-types'
 import { adminLoanDashboard } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Filler } from 'chart.js'
@@ -8,41 +9,39 @@ import { Doughnut, Line, Bar } from 'react-chartjs-2'
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Filler)
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const STATUS_COLORS = { '#3b82f6':'#3b82f6','#10b981':'#10b981','#f59e0b':'#f59e0b','#ef4444':'#ef4444','#8b5cf6':'#8b5cf6','#ec4899':'#ec4899','#6366f1':'#6366f1','#14b8a6':'#14b8a6' }
 
-const KPI_NAV = {
-  'Total Applications': '/admin/loan/applications?status=all',
-  'Pending Reviews': '/admin/loan/pending',
-  'Approved Today': '/admin/loan/applications?status=approved',
-  'Active Loans': '/admin/loan/active',
-  'Total Disbursed': '/admin/loan/disbursed',
-  'Outstanding Balance': '/admin/loan/active',
-  'Closed Loans': '/admin/loan/closed',
-  'Rejected': '/admin/loan/applications?status=rejected'
-}
-
-function KPICard({ icon, title, value, trend, subtitle, nav, variant }) {
+function KPICard({ icon, title, value, trend, subtitle, nav, color }) {
   const navigate = useNavigate()
   return (
-    <div className="card-stat" style={{ cursor: 'pointer', ...(variant ? { borderLeftColor: `var(--${variant})` } : {}) }} onClick={() => navigate(nav)}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
+    <div className="card-stat" style={{ cursor: 'pointer', padding: '14px 18px', '--accent-color': color }} onClick={() => navigate(nav)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="card-stat-icon" style={{ flexShrink: 0, background: `${color || 'var(--accent-color)'}1a`, color: color || 'var(--accent-color)' }}>
+          <span className="material-symbols-rounded">{icon}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="stat-title">{title}</div>
           <div className="stat-value">{value}</div>
           {trend !== undefined && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-              <span className={`material-symbols-rounded`} style={{ fontSize: 16, color: trend >= 0 ? 'var(--success)' : 'var(--danger)' }}>{trend >= 0 ? 'trending_up' : 'trending_down'}</span>
-              <span style={{ fontSize: 13, color: trend >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{trend >= 0 ? '+' : ''}{trend}</span>
-              {subtitle && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{subtitle}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 14, color: trend >= 0 ? 'var(--success)' : 'var(--danger)' }}>{trend >= 0 ? 'trending_up' : 'trending_down'}</span>
+              <span style={{ fontSize: 12, color: trend >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{trend >= 0 ? '+' : ''}{trend}</span>
+              {subtitle && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{subtitle}</span>}
             </div>
           )}
-        </div>
-        <div className={`card-stat-icon ${variant || ''}`}>
-          <span className="material-symbols-rounded">{icon}</span>
         </div>
       </div>
     </div>
   )
+}
+
+KPICard.propTypes = {
+  icon: PropTypes.string.isRequired,
+  title: PropTypes.string.isRequired,
+  value: PropTypes.any.isRequired,
+  trend: PropTypes.any,
+  subtitle: PropTypes.string,
+  nav: PropTypes.string.isRequired,
+  color: PropTypes.string
 }
 
 export default function AdminLoanDashboard() {
@@ -90,9 +89,10 @@ export default function AdminLoanDashboard() {
     datasets: [{ data:(data.loan_type_distribution||[]).map(t=>t.count), backgroundColor:['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'] }]
   }
 
+  const BAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#6366f1','#ec4899','#06b6d4','#f97316','#84cc16','#a855f7']
   const monthlyDisbData = {
     labels: (data.monthly_disbursement||[]).map(m => `${MONTHS[(m.month||1)-1]} ${m.year}`),
-    datasets: [{ label:'Disbursed (NPR)', data:(data.monthly_disbursement||[]).map(m=>m.total), backgroundColor:'rgba(16,185,129,0.6)', borderRadius:6 }]
+    datasets: [{ label:'Disbursed (NPR)', data:(data.monthly_disbursement||[]).map(m=>m.total), backgroundColor: (data.monthly_disbursement||[]).map((_, i) => BAR_COLORS[i % BAR_COLORS.length] + '99'), borderRadius: 6 }]
   }
 
   const alerts = data.priority_alerts || {}
@@ -107,14 +107,14 @@ export default function AdminLoanDashboard() {
       </div>
 
       <div className="grid-stats">
-        <KPICard icon="description" title="Total Applications" value={data.total_applications || 0} trend={data.today_approved || 0} subtitle="new today" nav="/admin/loan/applications" />
-        <KPICard icon="rate_review" title="Pending Reviews" value={`${data.pending_review || 0} Applications`} trend={data.clarification_required || 0} subtitle="waiting" nav="/admin/loan/pending" variant="warning" />
-        <KPICard icon="check_circle" title="Approved Today" value={data.today_approved || 0} trend={data.approved_loans || 0} subtitle="total approved" nav="/admin/loan/applications?status=approved" variant="success" />
-        <KPICard icon="request_quote" title="Active Loans" value={data.active_loans_count || 0} trend="" subtitle="currently active" nav="/admin/loan/active" />
-        <KPICard icon="payments" title="Total Disbursed" value={formatCurrency(data.total_disbursed_amount || 0)} trend="" subtitle="all time" nav="/admin/loan/disbursed" />
-        <KPICard icon="account_balance" title="Outstanding Balance" value={formatCurrency(data.total_outstanding_balance || 0)} trend="" subtitle="total receivable" nav="/admin/loan/active" variant="warning" />
-        <KPICard icon="folder" title="Closed Loans" value={data.closed_loans_count || 0} trend="" subtitle="fully paid" nav="/admin/loan/closed" />
-        <KPICard icon="cancel" title="Rejected" value={data.rejected_applications || 0} trend="" subtitle="total rejected" nav="/admin/loan/applications?status=rejected" variant="danger" />
+        <KPICard icon="description" title="Total Applications" value={data.total_applications || 0} trend={data.today_approved || 0} subtitle="new today" nav="/admin/loan/applications" color="#3b82f6" />
+        <KPICard icon="rate_review" title="Pending Review" value={`${data.pending_review || 0}`} trend={data.clarification_required || 0} subtitle="awaiting decision" nav="/admin/loan/pending" color="#f59e0b" />
+        <KPICard icon="request_quote" title="Active Loans" value={data.active_loans_count || 0} nav="/admin/loan/active" color="#14b8a6" />
+        <KPICard icon="payments" title="Disbursed Loans" value={data.disbursed_loans || 0} subtitle="total disbursed" nav="/admin/loan/disbursed" color="#10b981" />
+        <KPICard icon="account_balance" title="Outstanding Balance" value={formatCurrency(data.total_outstanding_balance || 0)} nav="/admin/loan/active" color="#8b5cf6" />
+        <KPICard icon="cancel" title="Rejected Applications" value={data.rejected_applications || 0} nav="/admin/loan/applications?status=rejected" color="#ef4444" />
+        <KPICard icon="trending_up" title="Approval Rate" value={`${((data.approved_loans || 0) / (data.total_applications || 1) * 100).toFixed(1)}%`} subtitle={`${data.approved_loans || 0} approved`} nav="/admin/loan/applications?status=approved" color="#6366f1" />
+        <KPICard icon="paid" title="Monthly Disbursement" value={formatCurrency(((data.monthly_disbursement||[]).slice(-1)[0]?.total || 0))} subtitle="this month" nav="/admin/loan/disbursed" color="#06b6d4" />
       </div>
 
       <div className="dashboard-charts-grid">
@@ -146,14 +146,20 @@ export default function AdminLoanDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div className="card">
-          <div className="card-title" style={{ marginBottom: 16 }}>Recent Admin Activity</div>
+          <div className="card-title" style={{ marginBottom: 12 }}>Recent Admin Activity</div>
           <div className="timeline-vertical">
             {(data.recent_activity || []).slice(0, 6).map(a => (
               <div key={a.id} className="tlv-item">
                 <div className="tlv-dot" style={{ background: a.type === 'approved' ? 'var(--success)' : a.type === 'rejected' ? 'var(--danger)' : 'var(--accent-color)' }} />
-                <div className="tlv-content">
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{a.action}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{a.by ? `by ${a.by}` : ''} &middot; {formatDate(a.time)}</div>
+                <div className="tlv-content" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{a.action}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {a.loan_id ? <span className="mono" style={{ marginRight: 8 }}>{a.loan_id}</span> : ''}
+                      {formatDate(a.time)}
+                    </div>
+                  </div>
+                  {a.status && <span className={`badge ${a.status === 'approved' || a.status === 'disbursed' ? 'badge-success' : a.status === 'rejected' ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: 10, height: 18 }}>{a.status.replace(/_/g, ' ')}</span>}
                 </div>
               </div>
             ))}

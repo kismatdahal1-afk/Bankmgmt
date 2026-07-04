@@ -259,12 +259,12 @@ export default function AdminLoanApplications() {
     <>
       <style>{`
         .la-table th,
-        .la-table td { padding: 8px 10px !important; vertical-align: middle; }
+        .la-table td { padding: 10px 14px !important; vertical-align: middle; }
         .la-table th:nth-child(4),
         .la-table td:nth-child(4) { text-align: right; }
         .la-table td:nth-child(1) .mono { font-size: 13px; }
         .la-name { font-weight: 600; font-size: 14px; }
-        .la-amount { text-align: right; display: block; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+        .la-amount { text-align: right; display: block; font-size: 13px; font-weight: 700; }
         .la-prio {
           display: inline-flex; align-items: center; padding: 2px 8px;
           border-radius: 5px; font-size: 10px; font-weight: 800;
@@ -400,7 +400,7 @@ export default function AdminLoanApplications() {
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Status</label>
-                  <select className="form-control" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1) }} style={{ width: '140px' }}>
+                  <select className="form-control" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1) }}>
                     <option value="">All Statuses</option>
                     {Object.entries({
                       submitted:'Submitted', under_review:'Staff Review', clarification_required:'Clarification Required',
@@ -411,28 +411,28 @@ export default function AdminLoanApplications() {
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Loan Type</label>
-                  <select className="form-control" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1) }} style={{ width: '140px' }}>
+                  <select className="form-control" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1) }}>
                     <option value="">All Types</option>
                     {LOAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Priority</label>
-                  <select className="form-control" value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); setCurrentPage(1) }} style={{ width: '110px' }}>
+                  <select className="form-control" value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); setCurrentPage(1) }}>
                     <option value="">All</option>
                     {Object.entries(PRIORITY_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Staff</label>
-                  <select className="form-control" value={staffFilter} onChange={e => { setStaffFilter(e.target.value); setCurrentPage(1) }} style={{ width: '140px' }}>
+                  <select className="form-control" value={staffFilter} onChange={e => { setStaffFilter(e.target.value); setCurrentPage(1) }}>
                     <option value="">All Staff</option>
                     {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sort</label>
-                  <select className="form-control" value={`${sortBy}-${sortDir}`} onChange={e => { const [f, d] = e.target.value.split('-'); setSortBy(f); setSortDir(d); setCurrentPage(1) }} style={{ width: '170px' }}>
+                  <select className="form-control" value={`${sortBy}-${sortDir}`} onChange={e => { const [f, d] = e.target.value.split('-'); setSortBy(f); setSortDir(d); setCurrentPage(1) }}>
                     {SORT_OPTIONS.reduce((acc, o) => {
                       acc.push(<option key={`${o.value}-desc`} value={`${o.value}-desc`}>{o.label} (Newest)</option>)
                       acc.push(<option key={`${o.value}-asc`} value={`${o.value}-asc`}>{o.label} (Oldest)</option>)
