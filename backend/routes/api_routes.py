@@ -2613,8 +2613,11 @@ def api_admin_loan_dashboard():
         extract('year', LoanApplication.approved_at).label('year'),
         extract('month', LoanApplication.approved_at).label('month'),
         func.sum(LoanApplication.amount).label('total')
-    ).filter(LoanApplication.status.in_(['approved', 'disbursed'])).group_by('year', 'month').order_by('year', 'month').all()
-    monthly_disbursement = [{'year': int(r.year), 'month': int(r.month), 'total': float(r.total)} for r in monthly_amounts]
+    ).filter(
+        LoanApplication.status.in_(['approved', 'disbursed']),
+        LoanApplication.approved_at.isnot(None)
+    ).group_by('year', 'month').order_by('year', 'month').all()
+    monthly_disbursement = [{'year': int(r.year), 'month': int(r.month), 'total': float(r.total)} for r in monthly_amounts if r.year is not None and r.month is not None and r.total is not None]
     
     npa_loans = Loan.query.filter(Loan.status == 'overdue').count()
     npa_rate = round((npa_loans / max(len(all_loans), 1)) * 100, 2) if all_loans else 0
@@ -2677,6 +2680,8 @@ def api_admin_loan_dashboard():
             'id': h.id,
             'action': f"{'Approved' if h.new_status == 'approved' else 'Rejected' if h.new_status == 'rejected' else 'Returned'} Loan {a.application_number}",
             'type': h.new_status,
+            'status': h.new_status,
+            'loan_id': a.application_number,
             'time': h.changed_at.isoformat() if h.changed_at else None,
             'by': h.changed_by
         } for h, a in (db.session.query(LoanStatusHistory, LoanApplication)
