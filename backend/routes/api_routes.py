@@ -2438,25 +2438,187 @@ def api_admin_return_to_staff(app_id):
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/admin/loan-applications/<int:app_id>/request-clarification', methods=['POST'])
+@admin_required
+def api_admin_request_clarification(app_id):
+    try:
+        app = LoanApplication.query.get_or_404(app_id)
+        data = request.get_json(silent=True) or request.form
+        reason = (data.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'error': 'Reason is required'}), 400
+        cr = ClarificationRequest(
+            loan_application_id=app.id,
+            request_by=f"Admin: {g.current_user.username}",
+            reason=reason
+        )
+        db.session.add(cr)
+        _track_status_change(app, 'clarification_required', changed_by=f"Admin: {g.current_user.username}", remarks=reason)
+        log_audit('loan_clarification_requested', 'loan_application', app.id,
+                  f'Admin requested clarification for {app.application_number}: {reason}')
+        notify_staff(None, 'Clarification Requested by Admin',
+                     f'Admin has requested clarification for loan {app.application_number}: {reason}')
+        db.session.commit()
+        return jsonify({'message': 'Clarification requested', 'application': _serialize_loan_application(app)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/admin/pending-reviews', methods=['GET'])
 @admin_required
 def api_admin_pending_reviews():
-    pending = LoanApplication.query.filter(LoanApplication.status.in_(['final_review', 'visit_scheduled'])).order_by(LoanApplication.updated_at.asc()).all()
     now = _utcnow()
-    total = len(pending)
-    high_priority = sum(1 for a in pending if a.amount > 500000)
+    today = now.date()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    loan_type = request.args.get('loan_type', '').strip()
+    branch = request.args.get('branch', '').strip()
+    amount_min = request.args.get('amount_min', type=float)
+    amount_max = request.args.get('amount_max', type=float)
+    priority = request.args.get('priority', '').strip()
+    staff = request.args.get('staff', '').strip()
+    waiting_range = request.args.get('waiting_range', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    sort_by = request.args.get('sort_by', 'oldest')
+
+    base_query = LoanApplication.query.join(Customer, LoanApplication.customer_id == Customer.id, isouter=True)
+    base_query = base_query.filter(LoanApplication.status == 'final_review')
+
+    if search:
+        like = f'%{search}%'
+        base_query = base_query.filter(
+            db.or_(Customer.full_name.ilike(like), Customer.email.ilike(like),
+                   Customer.phone_number.ilike(like), LoanApplication.application_number.ilike(like))
+        )
+    if loan_type:
+        base_query = base_query.filter(LoanApplication.loan_type == loan_type)
+    if amount_min is not None:
+        base_query = base_query.filter(LoanApplication.amount >= amount_min)
+    if amount_max is not None:
+        base_query = base_query.filter(LoanApplication.amount <= amount_max)
+    if date_from:
+        base_query = base_query.filter(LoanApplication.updated_at >= datetime.datetime.strptime(date_from, '%Y-%m-%d'))
+    if date_to:
+        base_query = base_query.filter(LoanApplication.updated_at <= datetime.datetime.strptime(date_to, '%Y-%m-%d') + datetime.timedelta(days=1))
+
+    if staff:
+        base_query = base_query.join(User, LoanApplication.assigned_staff_id == User.id, isouter=True)
+        base_query = base_query.filter(User.username.ilike(f'%{staff}%'))
+
+    all_matching = base_query.order_by(LoanApplication.updated_at.asc()).all()
+
+    def _compute_risk(a):
+        if a.amount > 500000:
+            return 'high'
+        elif a.amount > 200000:
+            return 'medium'
+        return 'low'
+
+    def _compute_waiting(a):
+        return (now - (a.updated_at or a.created_at)).total_seconds() / 3600
+
+    def _compute_priority(a, w):
+        if a.amount > 500000 or w > 48:
+            return 'high'
+        elif w > 24:
+            return 'medium'
+        return 'normal'
+
+    filtered = []
+    for a in all_matching:
+        w = _compute_waiting(a)
+        r = _compute_risk(a)
+        p = _compute_priority(a, w)
+        if priority and p != priority:
+            continue
+        if waiting_range:
+            if waiting_range == 'today' and w > 24:
+                continue
+            elif waiting_range == '1-3' and (w < 24 or w > 72):
+                continue
+            elif waiting_range == '4-7' and (w < 72 or w > 168):
+                continue
+            elif waiting_range == 'over7' and w <= 168:
+                continue
+        filtered.append((a, w, r, p))
+
+    total_all = len(filtered)
+    total_pages = max(1, (total_all + per_page - 1) // per_page)
+
+    sort_map = {
+        'oldest': (lambda x: x[1], False),
+        'newest': (lambda x: x[1], True),
+        'highest_amount': (lambda x: x[0].amount, True),
+        'lowest_amount': (lambda x: x[0].amount, False),
+        'priority': (lambda x: 0 if x[3] == 'high' else 1 if x[3] == 'medium' else 2, False),
+    }
+    sk, reverse = sort_map.get(sort_by, sort_map['oldest'])
+    filtered.sort(key=sk, reverse=reverse)
+
+    start = (page - 1) * per_page
+    page_items = filtered[start:start + per_page]
+
+    all_pending = LoanApplication.query.filter(LoanApplication.status == 'final_review').all()
+    sent_back = LoanApplication.query.filter(
+        LoanApplication.status.in_(['submitted', 'clarification_required']),
+        db.and_(*[LoanApplication.admin_remark.isnot(None), LoanApplication.admin_remark != ''])
+    ).count()
+
+    total_pending = len(all_pending)
+    high_priority_count = sum(1 for a in all_pending if a.amount > 500000)
+    overdue_count = sum(1 for a in all_pending if (now - (a.updated_at or a.created_at)).total_seconds() > 48 * 3600)
     avg_wait = 0
-    overdue = 0
-    if pending:
-        total_seconds = sum((now - (a.updated_at or a.created_at)).total_seconds() for a in pending)
-        avg_wait = int(total_seconds / total / 3600) if total else 0
-        overdue = sum(1 for a in pending if (now - (a.updated_at or a.created_at)).total_seconds() > 48 * 3600)
+    if all_pending:
+        total_seconds = sum((now - (a.updated_at or a.created_at)).total_seconds() for a in all_pending)
+        avg_wait = int(total_seconds / len(all_pending) / 3600)
+    ready_count = sum(1 for a in all_pending if a.documents and len(a.documents) > 0)
+
+    applications = []
+    for a, w, r, p in page_items:
+        forwarded_by = None
+        forwarded_date = None
+        if a.assigned_staff:
+            forwarded_by = a.assigned_staff.username
+        for h in a.status_history:
+            if h.new_status == 'final_review':
+                forwarded_date = h.changed_at.isoformat() if h.changed_at else None
+                if h.changed_by and 'Staff:' in h.changed_by:
+                    forwarded_by = h.changed_by.split('Staff: ', 1)[-1] if 'Staff: ' in h.changed_by else h.changed_by
+                break
+
+        documents_verified = any(d.document_type for d in a.documents) if a.documents else False
+
+        applications.append({
+            'id': a.id,
+            'application_number': a.application_number,
+            'customer_name': a.customer.full_name if a.customer else '',
+            'loan_type': a.loan_type,
+            'amount': float(a.amount),
+            'status': a.status,
+            'assigned_staff_name': a.assigned_staff.username if a.assigned_staff else None,
+            'forwarded_by': forwarded_by or (a.assigned_staff.username if a.assigned_staff else None),
+            'forwarded_date': forwarded_date,
+            'updated_at': a.updated_at.isoformat() if a.updated_at else None,
+            'waiting_hours': round(w, 1),
+            'risk_level': r,
+            'priority': p,
+            'documents_verified': documents_verified,
+        })
+
     return jsonify({
-        'total_pending': total,
+        'total_pending': total_pending,
         'average_wait_hours': avg_wait,
-        'high_priority': high_priority,
-        'overdue_reviews': overdue,
-        'applications': [_serialize_loan_application(a) for a in pending]
+        'high_priority': high_priority_count,
+        'overdue_reviews': overdue_count,
+        'ready_for_approval': ready_count,
+        'sent_back_to_staff': sent_back,
+        'applications': applications,
+        'page': page,
+        'per_page': per_page,
+        'total': total_all,
+        'total_pages': total_pages,
     })
 
 @api_bp.route('/admin/active-loans', methods=['GET'])

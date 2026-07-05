@@ -470,6 +470,20 @@ a:hover { color: var(--accent-hover); }
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
+select.form-control { -webkit-appearance: auto; appearance: auto; color: #fff; }
+select.form-control option { color: #fff; background: var(--bg-primary); font-size: 12px; padding: 4px 8px; }
+select.form-control option[value=""] { color: var(--text-muted); }
+
+.filter-label {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
