@@ -60,7 +60,7 @@ export default function UserMyLoans() {
   useEffect(() => { loadData() }, [location.pathname])
 
   const activeLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid')
-  const overdueCount = activeLoans.filter(l => l.is_overdue).length
+  const overdueCount = activeLoans.filter(l => l.payment_status === 'overdue' || l.is_overdue).length
 
   const openPayModal = (loan) => {
     setPayingLoan(loan)
@@ -497,19 +497,20 @@ export default function UserMyLoans() {
             const progress = calculateProgress(paid, total)
             const remainingEmis = loan.remaining_emis || (loan.emi > 0 ? Math.ceil(remaining / parseFloat(loan.emi)) : 0)
             const canPay = loan.status === 'approved' && remaining > 0
-            const statusColor = loan.is_overdue ? '#ef4444' : loan.status === 'approved' ? '#10b981' : loan.status === 'fully_paid' ? '#6366f1' : '#94a3b8'
-            const statusIcon = loan.is_overdue ? 'warning' : loan.status === 'approved' ? 'check_circle' : loan.status === 'fully_paid' ? 'verified' : 'circle'
-            const statusLabel = loan.is_overdue ? 'Overdue' : loan.status === 'fully_paid' ? 'Fully Paid' : 'Active'
+            const ps = loan.payment_status || 'current'
+            const statusColor = ps === 'overdue' ? '#ef4444' : ps === 'due_soon' ? '#f59e0b' : loan.status === 'fully_paid' ? '#6366f1' : '#10b981'
+            const statusIcon = ps === 'overdue' ? 'warning' : ps === 'due_soon' ? 'schedule' : loan.status === 'fully_paid' ? 'verified' : 'check_circle'
+            const statusLabel = ps === 'overdue' ? 'Overdue' : ps === 'due_soon' ? 'Due Soon' : loan.status === 'fully_paid' ? 'Fully Paid' : 'Current'
 
             return (
-              <div key={loan.id} className={`al-loan-card${loan.is_overdue ? ' overdue' : ''}`}>
+              <div key={loan.id} className={`al-loan-card${ps === 'overdue' ? ' overdue' : ''}`}>
                 {/* Card Header */}
                 <div className="al-card-top">
                   <div className="al-card-icon" style={{ background: `${statusColor}18`, color: statusColor }}>
                     <span className="material-symbols-rounded mat-icon">{statusIcon}</span>
                   </div>
                   <div className="al-card-info">
-                    <div className="al-card-number">{loan.loan_number}</div>
+                    <div className="al-card-number">{loan.application_number || loan.loan_number}</div>
                     <div className="al-card-meta">
                       <span>Principal {formatCurrency(loan.amount)}</span>
                       <span className="al-card-meta-sep">&middot;</span>
@@ -564,7 +565,7 @@ export default function UserMyLoans() {
                     <div className="al-card-progress-track">
                       <div className="al-card-progress-fill" style={{
                         width: `${progress}%`,
-                        background: loan.is_overdue ? '#ef4444' : progress >= 100 ? '#10b981' : 'linear-gradient(90deg, #3b82f6, #6366f1)'
+                        background: ps === 'overdue' ? '#ef4444' : progress >= 100 ? '#10b981' : 'linear-gradient(90deg, #3b82f6, #6366f1)'
                       }} />
                     </div>
                   </div>
@@ -656,7 +657,7 @@ export default function UserMyLoans() {
             </div>
             <div className="modal-body">
               <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-                Loan: <strong style={{ color: '#fff' }}>{payingLoan.loan_number}</strong>
+                Loan: <strong style={{ color: '#fff' }}>{payingLoan.application_number || payingLoan.loan_number}</strong>
                 &nbsp;&middot;&nbsp;Outstanding: <strong style={{ color: '#fff' }}>{formatCurrency(Math.max(0, parseFloat(payingLoan.total_payable) - parseFloat(payingLoan.total_paid)))}</strong>
               </p>
               {payError && (
@@ -665,11 +666,41 @@ export default function UserMyLoans() {
                   {payError}
                 </div>
               )}
+
+              {payingLoan.payment_status === 'overdue' && (
+                <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '8px', background: (payingLoan.overdue_days || 0) <= 7 ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${(payingLoan.overdue_days || 0) <= 7 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 4 }}>
+                    {(payingLoan.overdue_days || 0) <= 7 ? (
+                      <span style={{ color: 'var(--warning)' }}>Grace Period — No Penalty</span>
+                    ) : (
+                      <span style={{ color: 'var(--danger)' }}>Late Penalty Applied</span>
+                    )}
+                  </div>
+                  {(payingLoan.overdue_days || 0) > 7 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginTop: 4 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Late Penalty (5%)</span>
+                      <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{formatCurrency(payingLoan.late_penalty || 0)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginTop: 2 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Monthly EMI</span>
+                    <span style={{ fontWeight: 700, color: '#fff' }}>{formatCurrency(payingLoan.emi)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Total Payable</span>
+                    <span style={{ fontWeight: 800, color: 'var(--accent-color)', fontSize: '1rem' }}>
+                      {formatCurrency(parseFloat(payingLoan.emi || 0) + parseFloat(payingLoan.late_penalty || 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handlePay}>
                 <div className="form-group">
                   <label htmlFor="pay-amount">Amount (NPR)</label>
                   <input type="number" id="pay-amount" className="form-control"
-                    step="0.01" min="1" required
+                    step="0.01" min={(parseFloat(payingLoan.emi || 0) + parseFloat(payingLoan.late_penalty || 0)).toFixed(2)} required
+                    defaultValue={(parseFloat(payingLoan.emi || 0) + parseFloat(payingLoan.late_penalty || 0)).toFixed(2)}
                     value={payAmount} onChange={e => setPayAmount(e.target.value)} />
                 </div>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>

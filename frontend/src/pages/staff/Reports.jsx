@@ -120,7 +120,7 @@ export default function StaffReports() {
             <div className="table-container"><div className="table-header-bar"><span className="table-title">Today's Repayments</span></div>
               <table className="custom-table"><thead><tr><th>ID</th><th>Time</th><th>Borrower / Loan</th><th>Amount</th></tr></thead>
                 <tbody>{data.daily_repayments.map(r => (
-                  <tr key={r.id}><td><code>RP-{r.id}</code></td><td>{new Date(r.repayment_date).toLocaleTimeString()}</td><td>{r.loan?.customer?.full_name} ({r.loan?.loan_number})</td><td style={{ fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(r.amount)}</td></tr>
+                  <tr key={r.id}><td><code>RP-{r.id}</code></td><td>{new Date(r.repayment_date).toLocaleTimeString()}</td><td>{r.loan?.customer?.full_name} ({r.loan?.application_number || r.loan?.loan_number})</td><td style={{ fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(r.amount)}</td></tr>
                 ))}</tbody></table>
             </div>
           )}
@@ -226,7 +226,7 @@ export default function StaffReports() {
                   <tr key={item.id || i}>
                     <td style={{ fontSize: '0.85rem' }}>{formatDate(item.created_at || item.repayment_date)}</td>
                     <td style={{ fontWeight: 600, color: '#fff' }}>{item.customer_name}</td>
-                    <td><code>{item.account_number || item.loan_number}</code></td>
+                    <td><code>{item.account_number || item.application_number || item.loan_number}</code></td>
                     <td style={{ fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(item.amount)}</td>
                     <td><StatusBadge status={item.status || 'successful'} /></td>
                   </tr>
@@ -246,7 +246,7 @@ export default function StaffReports() {
               <tbody>
                 {loansList.map(l => (
                   <tr key={l.id}>
-                    <td><code>{l.loan_number}</code></td>
+                    <td><code>{l.application_number || l.loan_number}</code></td>
                     <td style={{ fontWeight: 600, color: '#fff' }}>{l.customer_name}</td>
                     <td style={{ fontWeight: 600 }}>{formatCurrency(l.amount)}</td>
                     <td>{l.interest_rate}%</td>
@@ -315,7 +315,7 @@ export default function StaffReports() {
               <table className="custom-table">
                 <thead><tr><th>Loan #</th><th>Amount</th><th>Rate</th><th>EMI</th><th>Paid</th><th>Status</th></tr></thead>
                 <tbody>{customerSummary.loans_summary.loans.map(l => (
-                  <tr key={l.loan_number}><td><code>{l.loan_number}</code></td><td>{formatCurrency(l.amount)}</td><td>{l.interest_rate}%</td><td>{formatCurrency(l.emi)}</td><td>{formatCurrency(l.total_paid)}</td><td><StatusBadge status={l.status} /></td></tr>
+                  <tr key={l.loan_number}><td><code>{l.application_number || l.loan_number}</code></td><td>{formatCurrency(l.amount)}</td><td>{l.interest_rate}%</td><td>{formatCurrency(l.emi)}</td><td>{formatCurrency(l.total_paid)}</td><td><StatusBadge status={l.status} /></td></tr>
                 ))}</tbody>
               </table>
             </div>

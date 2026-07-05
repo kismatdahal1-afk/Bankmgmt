@@ -209,7 +209,7 @@ export default function StaffCustomers() {
                     <div style={{ padding: '12px' }}>
                       {profileLoans.map(l => (
                         <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
-                          <div><code>{l.loan_number}</code> {formatCurrency(l.amount)} @ {l.interest_rate}%</div>
+                          <div><code>{l.application_number || l.loan_number}</code> {formatCurrency(l.amount)} @ {l.interest_rate}%</div>
                           <div><StatusBadge status={l.status} /></div>
                         </div>
                       ))}

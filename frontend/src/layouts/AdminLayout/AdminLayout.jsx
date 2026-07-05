@@ -21,7 +21,7 @@ export default function AdminLayout() {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }))
 
   useEffect(() => {
-    if (location.pathname.startsWith('/admin/loan/')) setLoanOpen(true)
+    if (location.pathname.startsWith('/admin/loan/') || location.pathname.startsWith('/admin/loans/') || location.pathname === '/admin/dashboard') setLoanOpen(true)
   }, [location.pathname])
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function AdminLayout() {
 
   const handleLogout = () => { logout(); navigate('/') }
 
-  const isLoanActive = () => location.pathname.startsWith('/admin/loan/')
+  const isLoanActive = () => location.pathname.startsWith('/admin/loan/') || location.pathname.startsWith('/admin/loans/')
 
   return (
     <div className="app-container">

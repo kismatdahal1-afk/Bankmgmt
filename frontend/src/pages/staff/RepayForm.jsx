@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/helpers'
+import PaymentStatusBadge from '../../components/common/PaymentStatusBadge'
 
 export default function StaffRepayForm() {
   const { id } = useParams()
@@ -24,6 +25,12 @@ export default function StaffRepayForm() {
   }, [id])
 
   const remainingBalance = loan ? parseFloat(loan.total_payable) - parseFloat(loan.total_paid) : 0
+  const emiVal = parseFloat(loan?.emi || 0)
+  const overdueDays = loan?.overdue_days || 0
+  const latePenalty = loan?.late_penalty || 0
+  const totalPayable = emiVal + latePenalty
+  const paymentStatus = loan?.payment_status || 'current'
+  const defaultAmount = latePenalty > 0 ? totalPayable : Math.min(emiVal, remainingBalance)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -60,12 +67,27 @@ export default function StaffRepayForm() {
         <div className="form-card" style={{ flex: 1, maxWidth: '500px' }}>
           <form onSubmit={handleSubmit}>
             <h3 style={{ marginBottom: '20px', color: '#fff' }}>Record Payment Details</h3>
+
+            {paymentStatus === 'overdue' && (
+              <div style={{ marginBottom: '16px', padding: '14px', borderRadius: '10px', background: overdueDays <= 7 ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${overdueDays <= 7 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <PaymentStatusBadge status="overdue" overdueDays={overdueDays} showDetail />
+                </div>
+                {overdueDays <= 7 ? (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--warning)' }}>Grace period active — no late penalty. Pay only the EMI amount.</div>
+                ) : (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--danger)' }}>Late penalty of <strong>{formatCurrency(latePenalty)}</strong> applied (5% of EMI). One-time fixed penalty.</div>
+                )}
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="amount">Repayment Amount (NPR)</label>
               <input type="number" id="amount" name="amount" className="form-control"
-                step="0.01" min="0.01" max={remainingBalance.toFixed(2)}
-                defaultValue={Math.min(parseFloat(loan?.emi || 0), remainingBalance).toFixed(2)} required />
+                step="0.01" min={(latePenalty > 0 ? totalPayable : 0.01).toFixed(2)} max={remainingBalance.toFixed(2)}
+                defaultValue={defaultAmount.toFixed(2)} required />
             </div>
+
             <div className="form-group">
               <label>Payment Method</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
@@ -85,40 +107,49 @@ export default function StaffRepayForm() {
               </div>
             </div>
             <button type="submit" className="btn btn-success" style={{ width: '100%', marginTop: '20px' }}>
-              <span className="material-symbols-rounded">payments</span> Record Repayment
+              <span className="material-symbols-rounded">payments</span>
+              Record Repayment
             </button>
           </form>
         </div>
 
         <div className="form-card" style={{ flex: 1, maxWidth: '400px', backgroundColor: 'rgba(255, 255, 255, 0.02)' }}>
           <h3 style={{ marginBottom: '20px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="material-symbols-rounded" style={{ color: 'var(--warning)' }}>info</span> Contract Summary
+            <span className="material-symbols-rounded" style={{ color: 'var(--warning)' }}>info</span>
+            Payment Summary
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Contract ID:</span>
-              <code style={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>{loan?.loan_number}</code>
+              <code style={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>{loan?.application_number || loan?.loan_number}</code>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Borrower:</span>
               <span style={{ fontWeight: 600, color: '#fff' }}>{loan?.customer?.full_name}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Principal:</span>
-              <span style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan?.amount)}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Payment Status:</span>
+              <PaymentStatusBadge status={paymentStatus} overdueDays={overdueDays} showDetail />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>EMI Amount:</span>
-              <span style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan?.emi)}/mo</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Monthly EMI:</span>
+              <span style={{ fontWeight: 700, color: '#fff' }}>{formatCurrency(emiVal)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Total Paid:</span>
-              <span style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(loan?.total_paid)}</span>
+            {latePenalty > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Late Penalty (5%):</span>
+                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{formatCurrency(latePenalty)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid var(--accent-color)', paddingBottom: '8px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total Payable:</span>
+              <span style={{ fontWeight: 800, color: 'var(--accent-color)', fontSize: '1.1rem' }}>{formatCurrency(totalPayable)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Remaining Payable:</span>
-              <span style={{ fontWeight: 700, color: 'var(--warning)' }}>{formatCurrency(remainingBalance)}</span>
-            </div>
+            {loan?.overdue_days > 7 && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                * Late penalty of 5% applied once per overdue installment after 7-day grace period. Does not compound.
+              </div>
+            )}
           </div>
         </div>
       </div>

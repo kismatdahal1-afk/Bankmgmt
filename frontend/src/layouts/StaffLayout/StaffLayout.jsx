@@ -19,7 +19,7 @@ export default function StaffLayout() {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kathmandu' }))
 
   useEffect(() => {
-    if (location.pathname.startsWith('/staff/loan/')) setLoanOpen(true)
+    if (location.pathname.startsWith('/staff/loan/') || location.pathname.startsWith('/staff/loans/') || location.pathname === '/staff/dashboard') setLoanOpen(true)
   }, [location.pathname])
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export default function StaffLayout() {
 
   const handleLogout = () => { logout(); navigate('/') }
 
-  const isLoanActive = () => location.pathname.startsWith('/staff/loan/')
+  const isLoanActive = () => location.pathname.startsWith('/staff/loan/') || location.pathname.startsWith('/staff/loans/')
 
   return (
     <div className="app-container">

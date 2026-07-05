@@ -305,7 +305,7 @@ export default function AdminCustomers() {
                     <table className="custom-table" style={{ margin: '0' }}>
                       <thead><tr><th>Loan #</th><th>Amount</th><th>Rate</th><th>EMI</th><th>Paid</th><th>Status</th></tr></thead>
                       <tbody>{profileLoans.map(l => (
-                        <tr key={l.id}><td><code style={{ fontSize: '0.8rem' }}>{l.loan_number}</code></td><td>{formatCurrency(l.amount)}</td><td>{l.interest_rate}%</td><td>{formatCurrency(l.emi)}</td><td>{formatCurrency(l.total_paid)}</td><td><StatusBadge status={l.status} /></td></tr>
+                        <tr key={l.id}><td><code style={{ fontSize: '0.8rem' }}>{l.application_number || l.loan_number}</code></td><td>{formatCurrency(l.amount)}</td><td>{l.interest_rate}%</td><td>{formatCurrency(l.emi)}</td><td>{formatCurrency(l.total_paid)}</td><td><StatusBadge status={l.status} /></td></tr>
                       ))}</tbody>
                     </table>
                   )}

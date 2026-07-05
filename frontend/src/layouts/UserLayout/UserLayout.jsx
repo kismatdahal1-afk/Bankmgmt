@@ -20,7 +20,7 @@ export default function UserLayout() {
   const [accountNumbers, setAccountNumbers] = useState([])
 
   useEffect(() => {
-    if (location.pathname.startsWith('/user/loan/')) setLoanOpen(true)
+    if (location.pathname.startsWith('/user/loan/') || location.pathname.startsWith('/user/loans/') || location.pathname === '/user/dashboard') setLoanOpen(true)
   }, [location.pathname])
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function UserLayout() {
 
   const handleLogout = () => { customerLogout(); navigate('/') }
 
-  const isLoanActive = () => location.pathname.startsWith('/user/loan/')
+  const isLoanActive = () => location.pathname.startsWith('/user/loan/') || location.pathname.startsWith('/user/loans/')
 
   return (
     <div className="app-container">

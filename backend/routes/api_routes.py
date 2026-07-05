@@ -127,15 +127,25 @@ def _serialize_customer(c):
     }
 
 def _serialize_loan_compact(l):
+    payment_status = _compute_payment_status(l)
+    overdue_details = _compute_overdue_details(l)
+    late_penalty = _compute_late_penalty(l)
+    next_due = _compute_next_due_date(l)
     return {
         'id': l.id,
         'loan_number': l.loan_number,
+        'application_number': _get_application_number(l.customer_id),
         'amount': float(l.amount),
         'interest_rate': float(l.interest_rate),
         'emi': float(l.emi),
         'total_payable': float(l.total_payable),
         'total_paid': float(l.total_paid),
         'status': l.status,
+        'payment_status': payment_status,
+        'overdue_days': overdue_details['overdue_days'],
+        'overdue_emis_count': overdue_details['overdue_emis'],
+        'late_penalty': late_penalty,
+        'next_due_date': next_due.isoformat() if next_due else None,
         'applied_date': l.applied_date.isoformat() if l.applied_date else None
     }
 
@@ -251,7 +261,11 @@ def _compute_loan_overdue(l):
         expected_min_paid = Decimal(str(expected_emis_paid)) * Decimal(str(l.emi or 0))
         if Decimal(str(l.total_paid)) < expected_min_paid * Decimal('0.5'):
             return True
-    return l.last_payment_date and (now - l.last_payment_date).days > 60
+    if l.last_payment_date:
+        return (now - l.last_payment_date).days > 60
+    if l.approved_date:
+        return (now - l.approved_date).days > 30
+    return False
 
 def _compute_remaining_emis(l):
     emi = l.emi
@@ -261,13 +275,78 @@ def _compute_remaining_emis(l):
     emi = Decimal(str(emi))
     return max(0, int(remaining / emi) + (1 if remaining % emi > 0 else 0))
 
+def _compute_expected_emis_paid(l):
+    if l.status != 'approved' or not l.approved_date:
+        return 0
+    now = datetime.datetime.now(_NPT).replace(tzinfo=None)
+    months_elapsed = (now.year - l.approved_date.year) * 12 + (now.month - l.approved_date.month)
+    return min(months_elapsed, l.duration_months)
+
+def _compute_actual_emis_paid(l):
+    return len([r for r in (l.repayments or []) if r.status == 'paid'])
+
+def _compute_overdue_emis_count(l):
+    if l.status != 'approved':
+        return 0
+    expected = _compute_expected_emis_paid(l)
+    actual = _compute_actual_emis_paid(l)
+    return max(0, expected - actual)
+
+def _compute_next_due_date(l):
+    if l.status != 'approved':
+        return None
+    actual = _compute_actual_emis_paid(l)
+    start = l.last_payment_date or l.approved_date
+    if not start:
+        return None
+    return start + datetime.timedelta(days=30)
+
+def _compute_overdue_details(l):
+    if _compute_overdue_emis_count(l) == 0:
+        return {'overdue_days': 0, 'overdue_emis': 0}
+    actual = _compute_actual_emis_paid(l)
+    start = l.approved_date
+    if not start:
+        return {'overdue_days': 0, 'overdue_emis': 0}
+    oldest_due = start + datetime.timedelta(days=(actual + 1) * 30)
+    now = datetime.datetime.now(_NPT).replace(tzinfo=None)
+    now_date = now.date() if hasattr(now, 'date') else now
+    due_date_only = oldest_due.date() if hasattr(oldest_due, 'date') else oldest_due
+    overdue_days = (now_date - due_date_only).days
+    return {'overdue_days': max(0, overdue_days), 'overdue_emis': _compute_overdue_emis_count(l)}
+
+def _compute_payment_status(l):
+    if _compute_overdue_emis_count(l) > 0:
+        return 'overdue'
+    next_due = _compute_next_due_date(l)
+    if not next_due:
+        return 'current'
+    now = datetime.datetime.now(_NPT).replace(tzinfo=None)
+    now_date = now.date() if hasattr(now, 'date') else now
+    due_date_only = next_due.date() if hasattr(next_due, 'date') else next_due
+    days_until_due = (due_date_only - now_date).days
+    if days_until_due <= 7:
+        return 'due_soon'
+    return 'current'
+
+def _compute_late_penalty(l):
+    overdue = _compute_overdue_details(l)
+    if overdue['overdue_emis'] == 0 or overdue['overdue_days'] <= 7:
+        return 0.0
+    return round(float(l.emi) * 0.05 * overdue['overdue_emis'], 2)
+
 def _serialize_loan(l):
     overdue = _compute_loan_overdue(l)
     effective_status = 'overdue' if overdue and l.status == 'approved' else l.status
     remaining_emis = _compute_remaining_emis(l)
+    payment_status = _compute_payment_status(l)
+    overdue_details = _compute_overdue_details(l)
+    late_penalty = _compute_late_penalty(l)
+    next_due = _compute_next_due_date(l)
     return {
         'id': l.id,
         'loan_number': l.loan_number,
+        'application_number': _get_application_number(l.customer_id),
         'customer_id': l.customer_id,
         'amount': float(l.amount),
         'interest_rate': float(l.interest_rate),
@@ -279,6 +358,11 @@ def _serialize_loan(l):
         'raw_status': l.status,
         'is_overdue': overdue,
         'remaining_emis': remaining_emis,
+        'payment_status': payment_status,
+        'overdue_days': overdue_details['overdue_days'],
+        'overdue_emis_count': overdue_details['overdue_emis'],
+        'late_penalty': late_penalty,
+        'next_due_date': next_due.isoformat() if next_due else None,
         'applied_date': l.applied_date.isoformat() if l.applied_date else None,
         'approved_date': l.approved_date.isoformat() if l.approved_date else None,
         'last_payment_date': l.last_payment_date.isoformat() if l.last_payment_date else None,
@@ -1318,9 +1402,20 @@ def api_repay_loan(loan_id):
             return jsonify({'error': 'Amount must be positive'}), 400
     except Exception:
         return jsonify({'error': 'Invalid amount'}), 400
-    remaining = loan.total_payable - loan.total_paid
-    if amount > remaining:
+    emi_val = Decimal(str(loan.emi))
+    overdue_count = _compute_overdue_emis_count(loan)
+    overdue_details = _compute_overdue_details(loan)
+    late_penalty = Decimal(str(_compute_late_penalty(loan)))
+    min_required = emi_val + late_penalty
+    if amount > Decimal(str(loan.total_payable)) - Decimal(str(loan.total_paid)):
         return jsonify({'error': 'Amount exceeds remaining balance'}), 400
+    if amount < min_required:
+        return jsonify({
+            'error': f'Minimum payment required is NPR {float(min_required):,.2f} (EMI: NPR {float(emi_val):,.2f} + Late Penalty: NPR {float(late_penalty):,.2f})',
+            'min_required': float(min_required),
+            'emi_amount': float(emi_val),
+            'late_penalty': float(late_penalty)
+        }), 400
     active_account = Account.query.filter_by(customer_id=loan.customer_id, status='active').with_for_update().first()
     if payment_method == 'account':
         if not active_account:
@@ -1349,11 +1444,13 @@ def api_repay_loan(loan_id):
             )
             db.session.add(txn)
         emi_cnt = len(loan.repayments) + 1
+        due_date = _compute_next_due_date(loan)
         repay = Repayment(
             loan_id=loan.id,
             amount=amount,
             emi_number=emi_cnt,
             status='paid',
+            due_date=due_date.date() if due_date else None,
             received_by=session.get('user_id')
         )
         db.session.add(repay)
@@ -1361,7 +1458,13 @@ def api_repay_loan(loan_id):
         notify_customer(loan.customer_id, 'EMI Payment Received',
             f'EMI #{emi_cnt} of NPR {float(amount):,.2f} received for loan {loan.loan_number}.')
         db.session.commit()
-        return jsonify({'message': 'Repayment recorded', 'loan': _serialize_loan(loan)})
+        serialized = _serialize_loan(loan)
+        serialized['breakdown'] = {
+            'emi_amount': float(emi_val),
+            'late_penalty': float(late_penalty),
+            'total_paid': float(amount)
+        }
+        return jsonify({'message': 'Repayment recorded', 'loan': serialized})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -1491,7 +1594,7 @@ def api_reports():
         'customer_txns': [_serialize_transaction(t) for t in customer_txns],
         'customer_loans': [_serialize_loan(l) for l in customer_loans],
         'daily_transactions': [_serialize_transaction(t) for t in daily_transactions],
-        'daily_repayments': [{'id': r.id, 'amount': float(r.amount), 'repayment_date': r.repayment_date.isoformat() if r.repayment_date else None, 'loan': {'loan_number': r.loan.loan_number, 'customer': {'full_name': r.loan.customer.full_name} if r.loan and r.loan.customer else None}} for r in daily_repayments],
+        'daily_repayments': [{'id': r.id, 'amount': float(r.amount), 'repayment_date': r.repayment_date.isoformat() if r.repayment_date else None, 'loan': {'loan_number': r.loan.loan_number, 'application_number': _get_application_number(r.loan.customer_id) if r.loan else None, 'customer': {'full_name': r.loan.customer.full_name} if r.loan and r.loan.customer else None}} for r in daily_repayments],
         'daily_summary': daily_summary,
         'monthly_summary': monthly_summary,
         'monthly_transactions_count': monthly_transactions_count
@@ -1830,9 +1933,18 @@ def api_customer_repay_loan(loan_id):
                 return jsonify({'error': 'Amount must be positive'}), 400
         except Exception:
             return jsonify({'error': 'Invalid amount'}), 400
-        remaining = loan.total_payable - loan.total_paid
-        if amount > remaining:
+        emi_val = Decimal(str(loan.emi))
+        late_penalty = Decimal(str(_compute_late_penalty(loan)))
+        min_required = emi_val + late_penalty
+        if amount > Decimal(str(loan.total_payable)) - Decimal(str(loan.total_paid)):
             return jsonify({'error': 'Amount exceeds remaining balance'}), 400
+        if amount < min_required:
+            return jsonify({
+                'error': f'Minimum payment required is NPR {float(min_required):,.2f} (EMI: NPR {float(emi_val):,.2f} + Late Penalty: NPR {float(late_penalty):,.2f})',
+                'min_required': float(min_required),
+                'emi_amount': float(emi_val),
+                'late_penalty': float(late_penalty)
+            }), 400
         active_account = Account.query.filter_by(customer_id=customer.id, status='active').with_for_update().first()
         if not active_account:
             return jsonify({'error': 'No active account for deduction'}), 400
@@ -1858,11 +1970,13 @@ def api_customer_repay_loan(loan_id):
         )
         db.session.add(txn)
         emi_cnt = len(loan.repayments) + 1
+        due_date = _compute_next_due_date(loan)
         repay = Repayment(
             loan_id=loan.id,
             amount=amount,
             emi_number=emi_cnt,
             status='paid',
+            due_date=due_date.date() if due_date else None,
             received_by=g.current_customer.id
         )
         db.session.add(repay)
@@ -1870,7 +1984,13 @@ def api_customer_repay_loan(loan_id):
         notify_customer(loan.customer_id, 'EMI Payment Received',
             f'EMI #{emi_cnt} of NPR {float(amount):,.2f} received for loan {loan.loan_number}.')
         db.session.commit()
-        return jsonify({'message': 'Repayment successful', 'loan': _serialize_loan(loan)})
+        serialized = _serialize_loan(loan)
+        serialized['breakdown'] = {
+            'emi_amount': float(emi_val),
+            'late_penalty': float(late_penalty),
+            'total_paid': float(amount)
+        }
+        return jsonify({'message': 'Repayment successful', 'loan': serialized})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -2624,20 +2744,346 @@ def api_admin_pending_reviews():
 @api_bp.route('/admin/active-loans', methods=['GET'])
 @staff_or_admin_required
 def api_admin_active_loans():
+    from sqlalchemy import func, extract
     loans = Loan.query.filter(Loan.status.in_(['approved'])).options(joinedload(Loan.customer), subqueryload(Loan.repayments)).all()
     now = _utcnow()
     total_outstanding = sum(float(l.total_payable - l.total_paid) for l in loans)
     monthly_emi = sum(float(l.emi) for l in loans)
-    overdue = sum(1 for l in loans if _compute_loan_overdue(l))
-    upcoming = sum(1 for l in loans if not _compute_loan_overdue(l) and (l.last_payment_date or l.approved_date) and (now - (l.last_payment_date or l.approved_date)).days > 25)
+    overdue = [l for l in loans if _compute_loan_overdue(l)]
+    upcoming = [l for l in loans if not _compute_loan_overdue(l) and (l.last_payment_date or l.approved_date) and (now - (l.last_payment_date or l.approved_date)).days > 25]
+    near_completion = [l for l in loans if _compute_remaining_emis(l) <= 3 and _compute_remaining_emis(l) > 0]
+    high_risk = [l for l in loans if _compute_loan_overdue(l) and (Decimal(str(l.total_payable)) - Decimal(str(l.total_paid))) > Decimal(str(l.emi)) * Decimal('3')]
+    scores = [_compute_loan_health(l) for l in loans]
+    avg_health = round(sum(scores) / len(scores), 1) if scores else 0
+
+    portfolio_trend = _compute_portfolio_trend(loans)
+    daily_trend = _compute_daily_trend(loans)
+
+    health_dist = {
+        'healthy': sum(1 for l in loans if not _compute_loan_overdue(l)),
+        'upcoming': len(upcoming),
+        'overdue': len(overdue),
+        'high_risk': len(high_risk),
+        'near_completion': len(near_completion)
+    }
+
+    recent_activities = []
+    for l in loans[:20]:
+        for r in (l.repayments or []):
+            recent_activities.append({
+                'type': 'payment',
+                'loan_number': l.loan_number,
+                'customer_name': l.customer.full_name if l.customer else '',
+                'amount': float(r.amount),
+                'date': r.repayment_date.isoformat() if r.repayment_date else None
+            })
+    recent_activities.sort(key=lambda x: x.get('date', ''), reverse=True)
+    recent_activities = recent_activities[:10]
+
     return jsonify({
         'total_active': len(loans),
         'outstanding_balance': total_outstanding,
         'monthly_emi_collection': monthly_emi,
-        'upcoming_payments': upcoming,
-        'overdue_accounts': overdue,
-        'loans': [_serialize_loan(l) for l in loans]
+        'upcoming_payments': len(upcoming),
+        'overdue_accounts': len(overdue),
+        'avg_health_score': avg_health,
+        'loans_near_completion': len(near_completion),
+        'default_risk_count': len(high_risk),
+        'portfolio_trend': portfolio_trend,
+        'daily_trend': daily_trend,
+        'health_distribution': health_dist,
+        'portfolio_distributions': {
+            'health': _compute_health_distribution_list(loans),
+            'type': _compute_loan_type_distribution(loans),
+            'status': _compute_status_distribution(loans),
+            'risk': _compute_risk_distribution(loans),
+            'repayment': _compute_repayment_performance(loans)
+        },
+        'recent_activities': recent_activities,
+        'loans': [_serialize_loan_full(l) for l in loans]
     })
+
+def _compute_loan_health(l):
+    if _compute_loan_overdue(l):
+        base = 30
+    elif l.total_paid and l.total_payable:
+        paid_ratio = float(l.total_paid) / float(l.total_payable)
+        base = 50 + int(paid_ratio * 40)
+    else:
+        base = 70
+    if l.last_payment_date:
+        days_since = (_utcnow() - l.last_payment_date).days
+        if days_since > 60:
+            base -= 20
+        elif days_since > 30:
+            base -= 10
+        elif days_since > 15:
+            base -= 5
+    return max(5, min(100, base))
+
+def _serialize_loan_full(l):
+    base = _serialize_loan(l)
+    overdue = _compute_loan_overdue(l)
+    remaining = _compute_remaining_emis(l)
+    health_score = _compute_loan_health(l)
+    c = l.customer
+    base.update({
+        'customer': {
+            'id': c.id, 'full_name': c.full_name, 'phone_number': c.phone_number,
+            'email': c.email or '', 'address': c.address or '', 'occupation': c.occupation or '',
+            'citizenship_id': c.citizenship_id, 'nominee_name': c.nominee_name or '',
+            'nominee_relationship': c.nominee_relationship or '', 'gender': c.gender or ''
+        } if c else None,
+        'loan_type': _get_loan_type(c.id) if c else '',
+        'health_score': health_score,
+        'health_status': 'overdue' if overdue else 'upcoming' if remaining <= 3 else 'healthy' if remaining > 3 else 'healthy',
+        'disbursed_date': l.approved_date.isoformat() if l.approved_date else None,
+        'expected_completion': _compute_expected_completion(l),
+        'collateral_type': _get_collateral_type(l.customer_id),
+        'collateral_value': _get_collateral_value(l.customer_id),
+        'assigned_staff_name': _get_assigned_staff_name(l.customer_id),
+        'purpose': _get_loan_purpose(l.customer_id)
+    })
+    repayments_sorted = sorted(base.get('repayments', []), key=lambda r: r.get('emi_number', 0))
+    base['repayments'] = repayments_sorted
+    return base
+
+def _compute_next_due(l):
+    if not l.last_payment_date and not l.approved_date:
+        return None
+    last = l.last_payment_date or l.approved_date
+    return (last + datetime.timedelta(days=30)).isoformat()
+
+def _compute_expected_completion(l):
+    if not l.approved_date or not l.duration_months:
+        return None
+    try:
+        dt = l.approved_date
+        month = dt.month - 1 + l.duration_months
+        year = dt.year + month // 12
+        month = month % 12 + 1
+        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
+        return datetime.datetime(year, month, day, tzinfo=dt.tzinfo).isoformat()
+    except:
+        return None
+
+def _get_application_number(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    return app.application_number if app else ''
+
+def _get_loan_type(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    return app.loan_type if app else ''
+
+def _get_collateral_type(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    return app.collateral_type or '' if app else ''
+
+def _get_collateral_value(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    return float(app.amount * Decimal('0.5')) if app and app.amount else 0
+
+def _get_assigned_staff_name(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    if app and app.assigned_staff:
+        return app.assigned_staff.username
+    return ''
+
+def _get_loan_purpose(customer_id):
+    app = LoanApplication.query.filter_by(customer_id=customer_id).order_by(LoanApplication.created_at.desc()).first()
+    return app.purpose if app else ''
+
+@api_bp.route('/admin/active-loans/<int:loan_id>', methods=['GET'])
+@admin_required
+def api_admin_active_loan_detail(loan_id):
+    loan = Loan.query.options(joinedload(Loan.customer), subqueryload(Loan.repayments)).get_or_404(loan_id)
+    return jsonify({'loan': _serialize_loan_full(loan)})
+
+
+@api_bp.route('/staff/active-loans', methods=['GET'])
+@staff_or_admin_required
+def api_staff_active_loans():
+    staff_user = g.current_user
+    loans = Loan.query.filter(Loan.status.in_(['approved'])).options(joinedload(Loan.customer), subqueryload(Loan.repayments)).all()
+    now = _utcnow()
+    assigned_loans = [l for l in loans if _is_loan_assigned_to_staff(l, staff_user)]
+    total_outstanding = sum(float(l.total_payable - l.total_paid) for l in assigned_loans)
+    monthly_emi = sum(float(l.emi) for l in assigned_loans)
+    overdue = [l for l in assigned_loans if _compute_loan_overdue(l)]
+    upcoming = [l for l in assigned_loans if not _compute_loan_overdue(l) and (l.last_payment_date or l.approved_date) and (now - (l.last_payment_date or l.approved_date)).days > 25]
+    near_completion = [l for l in assigned_loans if _compute_remaining_emis(l) <= 3 and _compute_remaining_emis(l) > 0]
+    high_risk = [l for l in assigned_loans if _compute_loan_overdue(l) and (Decimal(str(l.total_payable)) - Decimal(str(l.total_paid))) > Decimal(str(l.emi)) * Decimal('3')]
+    scores = [_compute_loan_health(l) for l in assigned_loans]
+    avg_health = round(sum(scores) / len(scores), 1) if scores else 0
+    recent_activities = []
+    for l in assigned_loans[:20]:
+        for r in (l.repayments or []):
+            recent_activities.append({
+                'type': 'payment', 'loan_number': l.loan_number,
+                'customer_name': l.customer.full_name if l.customer else '',
+                'amount': float(r.amount), 'date': r.repayment_date.isoformat() if r.repayment_date else None
+            })
+    recent_activities.sort(key=lambda x: x.get('date', ''), reverse=True)
+    recent_activities = recent_activities[:10]
+    portfolio_trend = _compute_portfolio_trend(assigned_loans)
+    daily_trend = _compute_daily_trend(assigned_loans)
+
+    return jsonify({
+        'total_active': len(assigned_loans), 'outstanding_balance': total_outstanding,
+        'monthly_emi_collection': monthly_emi, 'upcoming_payments': len(upcoming),
+        'overdue_accounts': len(overdue), 'avg_health_score': avg_health,
+        'loans_near_completion': len(near_completion), 'default_risk_count': len(high_risk),
+        'portfolio_trend': portfolio_trend,
+        'daily_trend': daily_trend,
+        'health_distribution': {'healthy': sum(1 for l in assigned_loans if not _compute_loan_overdue(l)), 'upcoming': len(upcoming), 'overdue': len(overdue), 'high_risk': len(high_risk), 'near_completion': len(near_completion)},
+        'portfolio_distributions': {
+            'health': _compute_health_distribution_list(assigned_loans),
+            'type': _compute_loan_type_distribution(assigned_loans),
+            'status': _compute_status_distribution(assigned_loans),
+            'risk': _compute_risk_distribution(assigned_loans),
+            'repayment': _compute_repayment_performance(assigned_loans)
+        },
+        'recent_activities': recent_activities,
+        'loans': [_serialize_loan_full(l) for l in assigned_loans]
+    })
+
+def _compute_portfolio_trend(loans):
+    from sqlalchemy import func
+    now = _utcnow()
+    y = now.year
+    loan_ids = [l.id for l in loans]
+    data = []
+    for m in range(1, 13):
+        if m == 12:
+            eom = datetime.date(y, 12, 31)
+        else:
+            eom = datetime.date(y, m + 1, 1) - datetime.timedelta(days=1)
+        som = datetime.date(y, m, 1)
+        disbursed = sum(float(l.amount) for l in loans if l.approved_date and l.approved_date.date() <= eom)
+        total_collected = db.session.query(func.sum(Repayment.amount)).filter(
+            Repayment.loan_id.in_(loan_ids),
+            Repayment.repayment_date != None,
+            func.date(Repayment.repayment_date) <= eom
+        ).scalar() or 0
+        month_collected = db.session.query(func.sum(Repayment.amount)).filter(
+            Repayment.loan_id.in_(loan_ids),
+            Repayment.repayment_date != None,
+            func.date(Repayment.repayment_date) >= som,
+            func.date(Repayment.repayment_date) <= eom
+        ).scalar() or 0
+        outstanding = disbursed - float(total_collected)
+        data.append({'year': y, 'month': m, 'outstanding': round(outstanding, 2), 'emi_collected': round(float(month_collected), 2)})
+    return data
+
+def _compute_daily_trend(loans):
+    from sqlalchemy import func
+    now = _utcnow()
+    now_date = now.date()
+    loan_ids = [l.id for l in loans]
+    DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    data = []
+    for i in range(6, -1, -1):
+        d = now_date - datetime.timedelta(days=i)
+        disbursed = sum(float(l.amount) for l in loans if l.approved_date and l.approved_date.date() <= d)
+        total_collected = db.session.query(func.sum(Repayment.amount)).filter(
+            Repayment.loan_id.in_(loan_ids),
+            Repayment.repayment_date != None,
+            func.date(Repayment.repayment_date) <= d
+        ).scalar() or 0
+        day_collected = db.session.query(func.sum(Repayment.amount)).filter(
+            Repayment.loan_id.in_(loan_ids),
+            Repayment.repayment_date != None,
+            func.date(Repayment.repayment_date) == d
+        ).scalar() or 0
+        outstanding = disbursed - float(total_collected)
+        data.append({'label': DAYS[d.weekday()], 'outstanding': round(outstanding, 2), 'emi_collected': round(float(day_collected), 2)})
+    return data
+
+def _compute_loan_type_distribution(loans):
+    from collections import Counter
+    types = Counter()
+    for l in loans:
+        app = LoanApplication.query.filter_by(customer_id=l.customer_id).order_by(LoanApplication.created_at.desc()).first()
+        lt = app.loan_type if app else 'Other'
+        types[lt] += 1
+    total = sum(types.values()) or 1
+    return [{'label': t, 'value': c, 'percentage': round(c / total * 100, 1)} for t, c in types.most_common()]
+
+def _compute_status_distribution(loans):
+    from collections import Counter
+    status_map = Counter()
+    for l in loans:
+        st = 'Active' if l.status == 'approved' else l.status.replace('_', ' ').title() if l.status else 'Unknown'
+        status_map[st] += 1
+    total = sum(status_map.values()) or 1
+    return [{'label': s, 'value': c, 'percentage': round(c / total * 100, 1)} for s, c in status_map.most_common()]
+
+def _compute_risk_distribution(loans):
+    from collections import Counter
+    risk_map = Counter()
+    for l in loans:
+        score = _compute_loan_health(l)
+        overdue = _compute_loan_overdue(l)
+        if score >= 70 and not overdue:
+            risk_map['Low Risk'] += 1
+        elif score >= 50 and not overdue:
+            risk_map['Medium Risk'] += 1
+        elif overdue and score >= 30:
+            risk_map['High Risk'] += 1
+        else:
+            risk_map['Critical'] += 1
+    total = sum(risk_map.values()) or 1
+    return [{'label': r, 'value': c, 'percentage': round(c / total * 100, 1)} for r, c in risk_map.most_common()]
+
+def _compute_repayment_performance(loans):
+    from collections import Counter
+    perf = Counter()
+    for l in loans:
+        ps = _compute_payment_status(l)
+        if ps == 'overdue':
+            perf['Overdue'] += 1
+        elif ps == 'due_soon':
+            perf['Due Soon'] += 1
+        else:
+            repayments = l.repayments or []
+            if not repayments:
+                perf['No Payments'] += 1
+            else:
+                perf['Current'] += 1
+    total = sum(perf.values()) or 1
+    return [{'label': p, 'value': c, 'percentage': round(c / total * 100, 1)} for p, c in perf.most_common()]
+
+def _compute_health_distribution_list(loans):
+    overdue = [l for l in loans if _compute_loan_overdue(l)]
+    now = _utcnow()
+    upcoming = [l for l in loans if not _compute_loan_overdue(l) and (l.last_payment_date or l.approved_date) and (now - (l.last_payment_date or l.approved_date)).days > 25]
+    from collections import Counter
+    c = Counter()
+    for l in loans:
+        if _compute_loan_overdue(l):
+            score = _compute_loan_health(l)
+            if score < 20:
+                c['Defaulted'] += 1
+            else:
+                c['Overdue'] += 1
+        elif l in upcoming:
+            c['Watchlist'] += 1
+        else:
+            c['Healthy'] += 1
+    total = sum(c.values()) or 1
+    return [{'label': h, 'value': v, 'percentage': round(v / total * 100, 1)} for h, v in c.most_common()]
+
+def _is_loan_assigned_to_staff(loan, staff_user):
+    if not loan.customer_id:
+        return False
+    app = LoanApplication.query.filter_by(customer_id=loan.customer_id).order_by(LoanApplication.created_at.desc()).first()
+    if not app or app.assigned_staff_id is None:
+        return False
+    try:
+        return int(app.assigned_staff_id) == int(staff_user.id)
+    except (ValueError, TypeError):
+        return str(app.assigned_staff_id) == str(staff_user.id)
+
 
 @api_bp.route('/admin/disbursed-loans', methods=['GET'])
 @admin_required

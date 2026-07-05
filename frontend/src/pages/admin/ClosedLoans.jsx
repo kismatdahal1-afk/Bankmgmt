@@ -20,7 +20,7 @@ export default function AdminClosedLoans() {
   }, [])
 
   const loans = (data?.loans || []).filter(l =>
-    !search || l.loan_number?.toLowerCase().includes(search.toLowerCase()) || l.customer?.full_name?.toLowerCase().includes(search.toLowerCase())
+    !search || l.application_number?.toLowerCase().includes(search.toLowerCase()) || l.loan_number?.toLowerCase().includes(search.toLowerCase()) || l.customer?.full_name?.toLowerCase().includes(search.toLowerCase())
   )
   const paginatedLoans = useMemo(() => loans.slice((currentPage - 1) * pageSize, currentPage * pageSize), [loans, currentPage, pageSize])
 
@@ -39,7 +39,7 @@ export default function AdminClosedLoans() {
         <div className="page-header">
           <div>
             <div className="page-title">Closed Loan Detail</div>
-            <div className="page-subtitle"><span className="mono">{l.loan_number}</span></div>
+            <div className="page-subtitle"><span className="mono">{l.application_number || l.loan_number}</span></div>
           </div>
           <button className="btn btn-secondary" onClick={() => setSelectedLoan(null)}>
             <span className="material-symbols-rounded">arrow_back</span> Back
@@ -144,7 +144,7 @@ export default function AdminClosedLoans() {
                 const paid = parseFloat(l.total_paid || 0)
                 return (
                   <tr key={l.id}>
-                    <td><span className="mono">{l.loan_number}</span></td>
+                    <td><span className="mono">{l.application_number || l.loan_number}</span></td>
                     <td style={{ fontWeight: 600 }}>{l.customer?.full_name || '—'}</td>
                     <td style={{ fontWeight: 600 }}>{formatCurrency(l.amount)}</td>
                     <td>{l.last_payment_date ? formatDate(l.last_payment_date) : '—'}</td>

@@ -123,7 +123,7 @@ export default function AppRoutes() {
         <Route path="loan/new-applications" element={<StaffNewApplications />} />
         <Route path="loan/verification-queue" element={<StaffVerificationQueue />} />
         <Route path="loan/visits" element={<StaffBranchVisits />} />
-          <Route path="loan/review/:id" element={<StaffLoanReview />} />
+        <Route path="loan/review/:id" element={<StaffLoanReview />} />
         <Route path="loan/assigned" element={<StaffNewApplications />} />
         <Route path="loan/pending" element={<StaffVerificationQueue />} />
         <Route path="loan-verification" element={<StaffNewApplications />} />

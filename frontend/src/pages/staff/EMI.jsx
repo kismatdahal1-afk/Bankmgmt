@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { formatCurrency, calculateProgress, formatDate } from '../../utils/helpers'
-import StatusBadge from '../../components/common/StatusBadge'
+import PaymentStatusBadge from '../../components/common/PaymentStatusBadge'
 
 export default function StaffEMI() {
   const [loans, setLoans] = useState([])
@@ -14,9 +14,10 @@ export default function StaffEMI() {
       .catch(() => setLoading(false))
   }, [])
 
-  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid' || l.is_overdue)
-  const activeCount = emiLoans.filter(l => l.status === 'approved' && !l.is_overdue).length
-  const overdueCount = emiLoans.filter(l => l.is_overdue).length
+  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid' || l.payment_status === 'overdue')
+  const currentCount = emiLoans.filter(l => (l.payment_status || 'current') === 'current').length
+  const dueSoonCount = emiLoans.filter(l => l.payment_status === 'due_soon').length
+  const overdueCount = emiLoans.filter(l => (l.payment_status || 'overdue') === 'overdue').length
 
 
   if (selectedLoan) {
@@ -28,7 +29,7 @@ export default function StaffEMI() {
       <>
         <div className="top-header">
           <div className="header-title">
-            <h1>EMI Details &mdash; {loan.loan_number}</h1>
+            <h1>EMI Details &mdash; {loan.application_number || loan.loan_number}</h1>
             <p>Detailed repayment schedule for {loan.customer?.full_name}</p>
           </div>
         </div>
@@ -48,17 +49,21 @@ export default function StaffEMI() {
             <span>{loan.repayments?.length || 0} payments</span>
           </div>
           <table className="custom-table">
-            <thead><tr><th>EMI #</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead>
+            <thead><tr><th>EMI #</th><th>Amount</th><th>Date</th><th>Late Fee</th><th>Status</th></tr></thead>
             <tbody>
-              {loan.repayments?.length > 0 ? loan.repayments.map(r => (
+              {loan.repayments?.length > 0 ? loan.repayments.map(r => {
+                const hasPenalty = r.status === 'paid' && r.repayment_date && r.due_date && new Date(r.repayment_date) > new Date(r.due_date + 'T23:59:59')
+                return (
                 <tr key={r.id}>
                   <td><code>EMI-{r.emi_number || '—'}</code></td>
                   <td style={{ fontWeight: 600 }}>{formatCurrency(r.amount)}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{formatDate(r.repayment_date)}</td>
-                  <td><StatusBadge status={r.status || 'paid'} /></td>
+                  <td style={{ color: hasPenalty ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: hasPenalty ? 600 : 400 }}>{hasPenalty ? formatCurrency(r.late_fee || r.late_penalty || 0) : '—'}</td>
+                  <td><PaymentStatusBadge status={r.status === 'paid' ? 'current' : r.status || 'current'} /></td>
                 </tr>
-              )) : (
-                <tr><td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No repayments recorded yet.</td></tr>
+                )
+              }) : (
+                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No repayments recorded yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -77,43 +82,44 @@ export default function StaffEMI() {
       </div>
 
       <div className="grid-stats" style={{ marginBottom: '10px' }}>
-        <div className={`card-stat`}><span className="stat-title">Active Loans</span><span className="stat-value">{activeCount}</span><span className="stat-sub">On-time payments</span></div>
-        <div className={`card-stat stat-danger`}><span className="stat-title">Overdue</span><span className="stat-value" style={{ color: 'var(--danger)' }}>{overdueCount}</span><span className="stat-sub">Require attention</span></div>
+        <div className="card-stat"><span className="stat-title">Current</span><span className="stat-value">{currentCount}</span><span className="stat-sub">On-time payments</span></div>
+        <div className="card-stat" style={{ borderTopColor: 'var(--warning)' }}><span className="stat-title">Due Soon</span><span className="stat-value" style={{ color: 'var(--warning)' }}>{dueSoonCount}</span><span className="stat-sub">Upcoming payments</span></div>
+        <div className="card-stat stat-danger"><span className="stat-title">Overdue</span><span className="stat-value" style={{ color: 'var(--danger)' }}>{overdueCount}</span><span className="stat-sub">Require attention</span></div>
       </div>
 
       <div className="table-container">
         <div className="table-header-bar">
           <span className="table-title">EMI Schedule Overview</span>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{activeCount} active &middot; {overdueCount} overdue</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{currentCount} current &middot; {dueSoonCount} due soon &middot; {overdueCount} overdue</span>
         </div>
         <table className="custom-table">
           <thead>
-            <tr><th>Loan ID</th><th>Customer</th><th>Principal</th><th>EMI</th><th>Paid</th><th>Remaining</th><th>EMIs Left</th><th>Progress</th><th>Status</th><th>Action</th></tr>
+            <tr><th>Loan ID</th><th>Customer</th><th>Principal</th><th>EMI</th><th>Paid</th><th>Remaining</th><th>EMIs Left</th><th>Penalty</th><th>Progress</th><th>Status</th><th>Action</th></tr>
           </thead>
           <tbody>
             {emiLoans.length > 0 ? emiLoans.map(loan => {
               const paid = parseFloat(loan.total_paid)
               const total = parseFloat(loan.total_payable)
               const progress = calculateProgress(paid, total)
-              const status = loan.is_overdue ? 'overdue' : loan.status
               return (
-                <tr key={loan.id} style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
-                  <td><code style={{ fontFamily: 'monospace' }}>{loan.loan_number}</code></td>
+                <tr key={loan.id} style={(loan.payment_status || 'current') === 'overdue' ? { borderLeft: '3px solid var(--danger)' } : {}}>
+                  <td><code style={{ fontFamily: 'monospace' }}>{loan.application_number || loan.loan_number}</code></td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{loan.customer?.full_name}</td>
                   <td style={{ fontWeight: 600 }}>{formatCurrency(loan.amount)}</td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan.emi)}/mo</td>
                   <td style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(paid)}</td>
                   <td style={{ color: 'var(--warning)', fontWeight: 600 }}>{formatCurrency(Math.max(0, total - paid))}</td>
                   <td>{loan.remaining_emis || 0}</td>
+                  <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{formatCurrency(loan.late_penalty || 0)}</td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '100px' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{progress}%</span>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: loan.is_overdue ? 'var(--danger)' : 'var(--success)' }} />
+                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: (loan.payment_status || 'current') === 'overdue' ? 'var(--danger)' : 'var(--success)' }} />
                       </div>
                     </div>
                   </td>
-                  <td><StatusBadge status={status} /></td>
+                  <td><PaymentStatusBadge status={loan.payment_status || 'current'} overdueDays={loan.overdue_days} showDetail /></td>
                   <td style={{ textAlign: 'right' }}>
                     <button onClick={() => setSelectedLoan(loan)} className="btn btn-sm btn-secondary" style={{ padding: '4px 10px' }}>
                       <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>visibility</span>
@@ -122,7 +128,7 @@ export default function StaffEMI() {
                 </tr>
               )
             }) : (
-              <tr><td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No active loans with EMI schedules found.</td></tr>
+              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No active loans with EMI schedules found.</td></tr>
             )}
           </tbody>
         </table>

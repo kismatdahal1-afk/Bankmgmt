@@ -1,7 +1,7 @@
 import datetime
 from decimal import Decimal
 from database.db import db
-from models import Customer, Account, Transaction, Loan, Repayment
+from models import Customer, Account, Transaction, Loan, Repayment, LoanApplication
 
 _NPT = datetime.timezone(datetime.timedelta(hours=5, minutes=45))
 def _utcnow():
@@ -232,6 +232,10 @@ def generate_customer_summary(customer_id):
             'total_paid': float(total_paid),
             'loans': [{
                 'loan_number': l.loan_number,
+                'application_number': (lambda a: a.application_number if a else None)(
+                    LoanApplication.query.filter_by(customer_id=l.customer_id)
+                    .order_by(LoanApplication.id.desc()).first()
+                ),
                 'amount': float(l.amount),
                 'interest_rate': float(l.interest_rate),
                 'emi': float(l.emi),

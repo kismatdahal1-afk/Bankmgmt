@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { formatCurrency, calculateProgress, formatDate } from '../../utils/helpers'
-import StatusBadge from '../../components/common/StatusBadge'
+import PaymentStatusBadge from '../../components/common/PaymentStatusBadge'
 
 export default function AdminEMI() {
   const [loans, setLoans] = useState([])
@@ -14,9 +14,10 @@ export default function AdminEMI() {
       .catch(() => setLoading(false))
   }, [])
 
-  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid' || l.is_overdue)
-  const activeCount = emiLoans.filter(l => l.status === 'approved' && !l.is_overdue).length
-  const overdueCount = emiLoans.filter(l => l.is_overdue).length
+  const emiLoans = (loans || []).filter(l => l.status === 'approved' || l.status === 'fully_paid' || l.payment_status === 'overdue')
+  const activeCount = emiLoans.filter(l => l.payment_status === 'current').length
+  const overdueCount = emiLoans.filter(l => l.payment_status === 'overdue').length
+  const dueSoonCount = emiLoans.filter(l => l.payment_status === 'due_soon').length
   const fullyPaidCount = emiLoans.filter(l => l.status === 'fully_paid').length
 
   if (selectedLoan) {
@@ -29,7 +30,7 @@ export default function AdminEMI() {
       <>
         <div className="top-header">
           <div className="header-title">
-            <h1>EMI Details &mdash; {loan.loan_number}</h1>
+            <h1>EMI Details &mdash; {loan.application_number || loan.loan_number}</h1>
             <p>Detailed repayment schedule for {loan.customer?.full_name}</p>
           </div>
         </div>
@@ -50,7 +51,7 @@ export default function AdminEMI() {
             <span style={{ fontWeight: 700, color: '#fff' }}>{progress}%</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${progress}%`, height: '100%', backgroundColor: loan.is_overdue ? 'var(--danger)' : 'var(--success)', borderRadius: '4px', transition: 'var(--transition)' }} />
+            <div style={{ width: `${progress}%`, height: '100%', backgroundColor: (loan.payment_status || 'current') === 'overdue' ? 'var(--danger)' : 'var(--success)', borderRadius: '4px', transition: 'var(--transition)' }} />
           </div>
         </div>
         <div className="table-container">
@@ -90,7 +91,8 @@ export default function AdminEMI() {
       </div>
 
       <div className="grid-stats" style={{ marginBottom: '10px' }}>
-        <StatsCard title="Active Loans" value={activeCount} subtitle="On-time payments" variant="success" />
+        <StatsCard title="Current" value={activeCount} subtitle="On-time payments" variant="success" />
+        <StatsCard title="Due Soon" value={dueSoonCount} subtitle="Payment within 7 days" variant="warning" />
         <StatsCard title="Overdue" value={overdueCount} subtitle="Require immediate attention" variant="danger" />
         <StatsCard title="Fully Paid" value={fullyPaidCount} subtitle="Completed contracts" />
       </div>
@@ -112,6 +114,7 @@ export default function AdminEMI() {
               <th>EMIs Left</th>
               <th>Progress</th>
               <th>Status</th>
+              <th>Penalty</th>
               <th style={{ textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -121,10 +124,11 @@ export default function AdminEMI() {
               const total = parseFloat(loan.total_payable)
               const remaining = total - paid
               const progress = calculateProgress(paid, total)
-              const status = loan.is_overdue ? 'overdue' : loan.status
+              const ps = loan.payment_status || 'current'
+              const penalty = loan.late_penalty || 0
               return (
-                <tr key={loan.id} style={loan.is_overdue ? { borderLeft: '3px solid var(--danger)' } : {}}>
-                  <td><code style={{ fontFamily: 'monospace' }}>{loan.loan_number}</code></td>
+                <tr key={loan.id} style={ps === 'overdue' ? { borderLeft: '3px solid var(--danger)' } : ps === 'due_soon' ? { borderLeft: '3px solid #f59e0b' } : {}}>
+                  <td><code style={{ fontFamily: 'monospace' }}>{loan.application_number || loan.loan_number}</code></td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{loan.customer?.full_name}</td>
                   <td style={{ fontWeight: 600 }}>{formatCurrency(loan.amount)}</td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(loan.emi)}/mo</td>
@@ -135,11 +139,12 @@ export default function AdminEMI() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{progress}%</span>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: loan.is_overdue ? 'var(--danger)' : 'var(--success)', transition: 'var(--transition)' }} />
+                        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: ps === 'overdue' ? 'var(--danger)' : 'var(--success)', transition: 'var(--transition)' }} />
                       </div>
                     </div>
                   </td>
-                  <td><StatusBadge status={status} /></td>
+                  <td><PaymentStatusBadge status={ps} overdueDays={loan.overdue_days} showDetail /></td>
+                  <td style={{ fontWeight: 600, color: penalty > 0 ? 'var(--danger)' : 'var(--text-muted)', fontSize: '0.85rem' }}>{penalty > 0 ? formatCurrency(penalty) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <button onClick={() => setSelectedLoan(loan)} className="btn btn-sm btn-secondary" style={{ padding: '4px 10px' }}>
                       <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>visibility</span> View
@@ -149,7 +154,7 @@ export default function AdminEMI() {
               )
             }) : (
               <tr>
-                <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                <td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   <span className="material-symbols-rounded" style={{ fontSize: '3rem', display: 'block', marginBottom: '12px' }}>calendar_month</span>
                   No active loans with EMI schedules found.
                 </td>
