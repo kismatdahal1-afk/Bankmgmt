@@ -25,9 +25,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      sessionStorage.clear()
-      window.location.href = '/'
+    if (error.response?.status === 401 && !sessionStorage.getItem('user_id') && !sessionStorage.getItem('customer_id')) {
+      const isLoginPage = window.location.pathname.startsWith('/staff/login') || window.location.pathname.startsWith('/admin/login') || window.location.pathname.startsWith('/user/login')
+      if (!isLoginPage) {
+        window.location.href = '/'
+      }
     }
     return Promise.reject(error)
   }
