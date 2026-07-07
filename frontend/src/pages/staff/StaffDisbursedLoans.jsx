@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import PropTypes from 'prop-types'
 import { staffDisbursedLoans } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import Pagination from '../../components/common/Pagination'
@@ -40,6 +41,7 @@ function AnimatedValue({ value }) {
   if (typeof value === 'string') return <>{value}</>
   return <>{display.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
 }
+AnimatedValue.propTypes = { value: PropTypes.any }
 
 function KPICard({ icon, title, value, subtitle, color }) {
   return (
@@ -55,6 +57,7 @@ function KPICard({ icon, title, value, subtitle, color }) {
     </div>
   )
 }
+KPICard.propTypes = { icon: PropTypes.string, title: PropTypes.string, value: PropTypes.any, subtitle: PropTypes.string, color: PropTypes.string }
 
 function DetailSection({ loan, onBack }) {
   const [activeTab, setActiveTab] = useState('info')
@@ -235,6 +238,7 @@ function DetailSection({ loan, onBack }) {
     </div>
   )
 }
+DetailSection.propTypes = { loan: PropTypes.object, onBack: PropTypes.func }
 
 function exportCSV(loans, filename) {
   const headers = ['Loan ID', 'Borrower', 'Loan Type', 'Approved Amount', 'Disbursed Amount', 'Disbursement Date', 'Interest Rate', 'Approved By', 'Processed By', 'Status']
