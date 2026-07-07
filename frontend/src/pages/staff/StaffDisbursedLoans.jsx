@@ -280,7 +280,7 @@ export default function StaffDisbursedLoans() {
       .finally(() => setLoading(false))
   }, [])
 
-  const d = data || {}
+  const d = useMemo(() => data || {}, [data])
 
   const loans = useMemo(() => {
     let list = [...(d.disbursed_loans || [])]
