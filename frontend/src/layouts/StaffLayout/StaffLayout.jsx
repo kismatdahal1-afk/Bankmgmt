@@ -8,7 +8,8 @@ const loanLinks = [
   { to: '/staff/loan/new-applications', label: 'New Applications', icon: 'assignment_add' },
   { to: '/staff/loan/verification-queue', label: 'Verification Queue', icon: 'verified' },
   { to: '/staff/loan/visits', label: 'Branch Visits', icon: 'calendar_month' },
-  { to: '/staff/loan/active', label: 'Active Loans', icon: 'request_quote' }
+  { to: '/staff/loan/active', label: 'Active Loans', icon: 'request_quote' },
+  { to: '/staff/loan/disbursed', label: 'Disbursed Loans', icon: 'payments' }
 ]
 
 export default function StaffLayout() {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { adminDisbursedLoans } from '../../services/loanApplicationService'
+import { staffDisbursedLoans } from '../../services/loanApplicationService'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import Pagination from '../../components/common/Pagination'
 import { Line, Doughnut } from 'react-chartjs-2'
@@ -24,7 +24,6 @@ const SORT_OPTS = [
   { value: 'rate_asc', label: 'Lowest Rate' },
   { value: 'rate_desc', label: 'Highest Rate' },
 ]
-const BRANCHES = ['', 'Main Branch', 'Downtown', 'Suburban', 'Rural']
 
 const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#6366f1', '#ec4899', '#84cc16', '#06b6d4', '#d946ef']
 
@@ -148,10 +147,6 @@ function DetailSection({ loan, onBack }) {
             <div style={{ width: '100%', height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
               <div style={{ width: `${progress}%`, height: '100%', background: progress >= 80 ? 'var(--success)' : progress >= 50 ? '#f59e0b' : 'var(--danger)', borderRadius: 3 }} />
             </div>
-            <div style={{ display: 'flex', gap: 24, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <span>{(l.repayments || []).filter(r => r.status === 'paid').length} EMIs Paid</span>
-              <span>{l.remaining_emis || 0} EMIs Remaining</span>
-            </div>
           </div>
         </div>
       )}
@@ -262,7 +257,7 @@ function exportPDF(loans) {
   w.document.close()
 }
 
-export default function AdminDisbursedLoans() {
+export default function StaffDisbursedLoans() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedLoan, setSelectedLoan] = useState(null)
@@ -275,7 +270,7 @@ export default function AdminDisbursedLoans() {
   const containerRef = useRef(null)
 
   useEffect(() => {
-    adminDisbursedLoans()
+    staffDisbursedLoans()
       .then(res => setData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -325,12 +320,7 @@ export default function AdminDisbursedLoans() {
         const d = new Date(today); d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0, 10)
         const dayApps = filtered.filter(a => a.approved_at && a.approved_at.slice(0, 10) === ds)
-        result.push({
-          label: d.toLocaleDateString('en', { weekday: 'short' }),
-          disbursed_amount: dayApps.reduce((s, a) => s + parseFloat(a.amount || 0), 0),
-          loan_count: dayApps.length,
-          full_label: d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
-        })
+        result.push({ label: d.toLocaleDateString('en', { weekday: 'short' }), disbursed_amount: dayApps.reduce((s, a) => s + parseFloat(a.amount || 0), 0), loan_count: dayApps.length, full_label: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) })
       }
       return { labels: result.map(r => r.label), amounts: result.map(r => r.disbursed_amount), counts: result.map(r => r.loan_count), fullLabels: result.map(r => r.full_label) }
     }
@@ -432,7 +422,7 @@ export default function AdminDisbursedLoans() {
       <div className="page-header">
         <div>
           <div className="page-title">Disbursed Loans</div>
-          <div className="page-subtitle">Monitor and analyze all disbursed loan activity across the bank</div>
+          <div className="page-subtitle">Monitor and analyze all disbursed loan activity</div>
         </div>
         <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', padding: '6px 14px', borderRadius: 8 }}>
           <span className="material-symbols-rounded" style={{ fontSize: 16, verticalAlign: -3 }}>today</span> {new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kathmandu', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -440,12 +430,12 @@ export default function AdminDisbursedLoans() {
       </div>
 
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <KPICard icon="payments" title="Total Disbursed Amount" value={d.total_amount} subtitle="Total NRP disbursed to date" color="#3b82f6" />
-        <KPICard icon="today" title="Today's Disbursement Amount" value={d.today_amount} subtitle="Amount released today" color="#8b5cf6" />
-        <KPICard icon="handshake" title="Today's Disbursed Loans" value={d.today_disbursements || d.todays_disbursement} subtitle="Loans disbursed today" color="#10b981" />
-        <KPICard icon="calendar_month" title="This Month Disbursed Amount" value={d.this_month_amount} subtitle="Total disbursed this month" color="#f59e0b" />
-        <KPICard icon="stacked_bar_chart" title="This Month Disbursed Loans" value={d.this_month_count} subtitle="Loans disbursed this month" color="#3b82f6" />
-        <KPICard icon="analytics" title="Average Disbursement Amount" value={d.average_disbursement} subtitle="Per loan average" color="#10b981" />
+        <KPICard icon="payments" title="Total Disbursed Amount" value={d.total_amount ? 'NRP ' + Number(d.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'NRP 0.00'} subtitle="Total NRP disbursed to date" color="#3b82f6" />
+        <KPICard icon="today" title="Today's Disbursement Amount" value={d.today_amount ? 'NRP ' + Number(d.today_amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'NRP 0.00'} subtitle="Amount released today" color="#8b5cf6" />
+        <KPICard icon="handshake" title="Today's Disbursed Loans" value={d.today_disbursements || d.todays_disbursement || 0} subtitle="Loans disbursed today" color="#10b981" />
+        <KPICard icon="calendar_month" title="This Month Disbursed Amount" value={d.this_month_amount ? 'NRP ' + Number(d.this_month_amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'NRP 0.00'} subtitle="Total disbursed this month" color="#f59e0b" />
+        <KPICard icon="stacked_bar_chart" title="This Month Disbursed Loans" value={d.this_month_count || 0} subtitle="Loans disbursed this month" color="#3b82f6" />
+        <KPICard icon="analytics" title="Average Disbursement Amount" value={d.average_disbursement ? 'NRP ' + Number(d.average_disbursement).toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'NRP 0.00'} subtitle="Per loan average" color="#10b981" />
       </div>
 
       <div className="charts-row" style={{ gridTemplateColumns: '1.8fr 1fr' }}>
@@ -516,7 +506,7 @@ export default function AdminDisbursedLoans() {
         <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'flex-end', padding: '12px 20px 16px' }}>
           <div className="filter-group" style={{ flex: '1.6', minWidth: 140, position: 'relative' }}>
             <span className="material-symbols-rounded" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 18, pointerEvents: 'none' }}>search</span>
-            <input className="form-control" placeholder="Search Loan ID, Borrower, Account..." value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value, currentPage: 1 }))} style={{ paddingLeft: 36, width: '100%' }} />
+            <input className="form-control" placeholder="Search Loan ID, Borrower, Account..." value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} style={{ paddingLeft: 36, width: '100%' }} />
           </div>
           <div className="filter-group" style={{ flex: '1', minWidth: 120 }}>
             <label className="dl-filter-label">Loan Type</label>
@@ -528,7 +518,11 @@ export default function AdminDisbursedLoans() {
           <div className="filter-group" style={{ flex: '1', minWidth: 100 }}>
             <label className="dl-filter-label">Branch</label>
             <select className="form-control" value={filters.branch} onChange={e => setFilters(p => ({ ...p, branch: e.target.value }))}>
-              {BRANCHES.map(b => <option key={b} value={b}>{b || 'All Branches'}</option>)}
+              <option value="">All Branches</option>
+              <option value="Main Branch">Main Branch</option>
+              <option value="Downtown">Downtown</option>
+              <option value="Suburban">Suburban</option>
+              <option value="Rural">Rural</option>
             </select>
           </div>
           <div className="filter-group" style={{ flex: '1', minWidth: 120 }}>

@@ -50,6 +50,7 @@ import StaffNewApplications from '../pages/staff/StaffNewApplications'
 import StaffVerificationQueue from '../pages/staff/StaffVerificationQueue'
 import StaffBranchVisits from '../pages/staff/StaffBranchVisits'
 import StaffActiveLoans from '../pages/staff/StaffActiveLoans'
+import StaffDisbursedLoans from '../pages/staff/StaffDisbursedLoans'
 import AdminLoanApplications from '../pages/admin/LoanApplications'
 import AdminLoanReview from '../pages/admin/LoanReviewAdmin'
 import AdminLoanDashboard from '../pages/admin/LoanDashboard'
@@ -119,6 +120,7 @@ export default function AppRoutes() {
         <Route path="reports" element={<StaffReports />} />
         <Route path="notifications" element={<StaffNotifications />} />
         <Route path="loan/active" element={<StaffActiveLoans />} />
+        <Route path="loan/disbursed" element={<StaffDisbursedLoans />} />
         <Route path="loan/dashboard" element={<StaffLoanDashboard />} />
         <Route path="loan/new-applications" element={<StaffNewApplications />} />
         <Route path="loan/verification-queue" element={<StaffVerificationQueue />} />

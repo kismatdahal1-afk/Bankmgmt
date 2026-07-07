@@ -2947,6 +2947,205 @@ def api_staff_active_loans():
         'loans': [_serialize_loan_full(l) for l in assigned_loans]
     })
 
+@api_bp.route('/staff/disbursed-loans', methods=['GET'])
+@staff_or_admin_required
+def api_staff_disbursed_loans():
+    now = _utcnow()
+    today = now.date()
+    month_start = today.replace(day=1)
+
+    disbursed_apps = LoanApplication.query.filter(LoanApplication.status == 'approved').order_by(LoanApplication.approved_at.desc()).all()
+    customer_ids = [a.customer_id for a in disbursed_apps if a.customer_id]
+    loans = Loan.query.filter(Loan.customer_id.in_(customer_ids), Loan.status.in_(['approved', 'fully_paid'])).options(joinedload(Loan.customer), subqueryload(Loan.repayments)).all() if customer_ids else []
+    loan_map = {l.customer_id: l for l in loans}
+
+    total_disbursed = len(disbursed_apps)
+    total_amount = sum(float(a.amount) for a in disbursed_apps)
+    today_count = sum(1 for a in disbursed_apps if a.approved_at and a.approved_at.date() == today)
+    today_amount = sum(float(a.amount) for a in disbursed_apps if a.approved_at and a.approved_at.date() == today)
+
+    active_repayment = sum(1 for l in loans if l.status == 'approved')
+    completed = sum(1 for l in loans if l.status == 'fully_paid')
+    overdue_count = sum(1 for l in loans if _compute_loan_overdue(l))
+
+    upcoming_first_emi = 0
+    for a in disbursed_apps:
+        l = loan_map.get(a.customer_id)
+        if l and l.status == 'approved' and l.repayments:
+            paid_emis = [r for r in l.repayments if r.status == 'paid']
+            if not paid_emis:
+                next_due = _compute_next_due_date(l)
+                if next_due and next_due.date() <= today + datetime.timedelta(days=7):
+                    upcoming_first_emi += 1
+
+    monthly_trend = []
+    for m in range(1, 13):
+        eom = datetime.date(today.year, m + 1, 1) - datetime.timedelta(days=1) if m < 12 else datetime.date(today.year, 12, 31)
+        som = datetime.date(today.year, m, 1)
+        month_disbursed = [a for a in disbursed_apps if a.approved_at and som <= a.approved_at.date() <= eom]
+        monthly_trend.append({
+            'month': m,
+            'year': today.year,
+            'disbursed_amount': round(sum(float(a.amount) for a in month_disbursed), 2),
+            'loan_count': len(month_disbursed)
+        })
+
+    loan_type_dist = {}
+    for a in disbursed_apps:
+        lt = a.loan_type or 'Other'
+        loan_type_dist[lt] = loan_type_dist.get(lt, 0) + 1
+    total_types = sum(loan_type_dist.values()) or 1
+    type_distribution = [{'label': t, 'value': c, 'percentage': round(c / total_types * 100, 1)} for t, c in sorted(loan_type_dist.items(), key=lambda x: -x[1])]
+
+    purpose_dist = {}
+    for a in disbursed_apps:
+        p = a.purpose or 'Not Specified'
+        purpose_dist[p] = purpose_dist.get(p, 0) + 1
+    total_purp = sum(purpose_dist.values()) or 1
+    purpose_distribution = [{'label': p[:30], 'value': c, 'percentage': round(c / total_purp * 100, 1)} for p, c in sorted(purpose_dist.items(), key=lambda x: -x[1])[:8]]
+
+    repay_status_dist = {}
+    for l in loans:
+        ps = _compute_payment_status(l) if l.status == 'approved' else 'completed'
+        label = {'current': 'Current', 'due_soon': 'Due Soon', 'overdue': 'Overdue'}.get(ps, 'Completed')
+        repay_status_dist[label] = repay_status_dist.get(label, 0) + 1
+    total_repay = sum(repay_status_dist.values()) or 1
+    repayment_distribution = [{'label': k, 'value': v, 'percentage': round(v / total_repay * 100, 1)} for k, v in sorted(repay_status_dist.items(), key=lambda x: -x[1])]
+
+    risk_dist = {}
+    for l in loans:
+        if l.status == 'fully_paid':
+            risk_dist['Low Risk'] = risk_dist.get('Low Risk', 0) + 1
+        else:
+            score = _compute_loan_health(l)
+            if score >= 70: risk_dist['Low Risk'] = risk_dist.get('Low Risk', 0) + 1
+            elif score >= 40: risk_dist['Medium Risk'] = risk_dist.get('Medium Risk', 0) + 1
+            else: risk_dist['High Risk'] = risk_dist.get('High Risk', 0) + 1
+    total_risk = sum(risk_dist.values()) or 1
+    risk_distribution = [{'label': k, 'value': v, 'percentage': round(v / total_risk * 100, 1)} for k, v in sorted(risk_dist.items(), key=lambda x: -x[1])]
+
+    this_month_amount = round(sum(float(a.amount) for a in disbursed_apps if a.approved_at and month_start <= a.approved_at.date() <= today), 2)
+    this_month_count = sum(1 for a in disbursed_apps if a.approved_at and month_start <= a.approved_at.date() <= today)
+    average_disbursement = round(total_amount / total_disbursed, 2) if total_disbursed else 0
+
+    daily_trend = []
+    for i in range(6, -1, -1):
+        d = today - datetime.timedelta(days=i)
+        day_apps = [a for a in disbursed_apps if a.approved_at and a.approved_at.date() == d]
+        daily_trend.append({
+            'date': d.isoformat(),
+            'label': d.strftime('%a'),
+            'full_label': d.strftime('%b %d'),
+            'disbursed_amount': round(sum(float(a.amount) for a in day_apps), 2),
+            'loan_count': len(day_apps)
+        })
+
+    branch_dist = {}
+    for a in disbursed_apps:
+        branch = 'Main Branch'
+        if a.customer and a.customer.address:
+            parts = [p.strip() for p in a.customer.address.split(',')]
+            branch = parts[-1] if len(parts) > 1 else parts[0]
+        branch_dist[branch] = branch_dist.get(branch, 0) + 1
+    total_branches = sum(branch_dist.values()) or 1
+    branch_distribution = [{'label': b, 'value': c, 'percentage': round(c / total_branches * 100, 1)} for b, c in sorted(branch_dist.items(), key=lambda x: -x[1])]
+
+    staff_dist = {}
+    for a in disbursed_apps:
+        sn = a.assigned_staff.username if a.assigned_staff else 'Unassigned'
+        staff_dist[sn] = staff_dist.get(sn, 0) + 1
+    total_staff = sum(staff_dist.values()) or 1
+    staff_distribution = [{'label': s, 'value': c, 'percentage': round(c / total_staff * 100, 1)} for s, c in sorted(staff_dist.items(), key=lambda x: -x[1])]
+
+    cat_dist = {}
+    for a in disbursed_apps:
+        occ = (a.customer.occupation or 'Unknown').strip().lower() if a.customer else 'Unknown'
+        if occ in ('teacher', 'doctor', 'nurse', 'engineer', 'accountant', 'lawyer'):
+            cat = 'Professional'
+        elif occ in ('business', 'entrepreneur', 'trader', 'shopkeeper', 'merchant'):
+            cat = 'Business'
+        elif occ in ('farmer', 'agriculture', 'fisherman'):
+            cat = 'Agriculture'
+        elif occ in ('government', 'civil servant', 'public sector', 'govt employee', 'govt'):
+            cat = 'Government Employee'
+        elif occ in ('private job', 'private employee', 'corporate', 'private sector', 'employed'):
+            cat = 'Private Employee'
+        elif occ in ('student', 'housewife', 'retired', 'unemployed'):
+            cat = 'Other'
+        else:
+            cat = 'Self Employed' if occ and occ != 'unknown' else 'Not Specified'
+        cat_dist[cat] = cat_dist.get(cat, 0) + 1
+    total_cats = sum(cat_dist.values()) or 1
+    customer_category_distribution = [{'label': c, 'value': v, 'percentage': round(v / total_cats * 100, 1)} for c, v in sorted(cat_dist.items(), key=lambda x: -x[1])]
+
+    emp_dist = {}
+    for a in disbursed_apps:
+        occ = (a.customer.occupation or '').strip().lower() if a.customer else ''
+        if occ in ('teacher', 'doctor', 'nurse', 'engineer', 'accountant', 'lawyer', 'government', 'civil servant', 'govt', 'private job', 'private employee', 'corporate'):
+            emp = 'Salaried'
+        elif occ in ('business', 'entrepreneur', 'trader', 'shopkeeper', 'merchant', 'self employed', 'freelancer'):
+            emp = 'Self-Employed'
+        elif occ in ('farmer', 'agriculture', 'fisherman'):
+            emp = 'Agriculture'
+        elif occ in ('student', 'housewife', 'retired', 'unemployed'):
+            emp = 'Other'
+        else:
+            emp = 'Not Specified'
+        emp_dist[emp] = emp_dist.get(emp, 0) + 1
+    total_emp = sum(emp_dist.values()) or 1
+    employment_type_distribution = [{'label': e, 'value': v, 'percentage': round(v / total_emp * 100, 1)} for e, v in sorted(emp_dist.items(), key=lambda x: -x[1])]
+
+    def _serialize_disbursed(app):
+        l = loan_map.get(app.customer_id)
+        return {
+            'id': app.id,
+            'application_number': app.application_number,
+            'customer_id': app.customer_id,
+            'customer_name': app.customer.full_name if app.customer else '',
+            'customer_phone': app.customer.phone_number if app.customer else '',
+            'loan_type': app.loan_type,
+            'amount': float(app.amount),
+            'interest_rate': float(app.interest_rate),
+            'duration_months': app.duration_months,
+            'purpose': app.purpose,
+            'collateral_type': app.collateral_type,
+            'status': app.status,
+            'assigned_staff_id': app.assigned_staff_id,
+            'assigned_staff_name': app.assigned_staff.username if app.assigned_staff else None,
+            'approved_at': app.approved_at.isoformat() if app.approved_at else None,
+            'disbursed_at': app.disbursed_at.isoformat() if app.disbursed_at else None,
+            'submitted_at': app.submitted_at.isoformat() if app.submitted_at else None,
+            'created_at': app.created_at.isoformat() if app.created_at else None,
+            'documents': [{'id': d.id, 'document_type': d.document_type, 'file_name': d.file_name, 'file_path': d.file_path, 'file_url': f'api/uploads/loan_docs/{os.path.basename(d.file_path)}', 'file_size': d.file_size, 'uploaded_at': d.uploaded_at.isoformat() if d.uploaded_at else None} for d in app.documents] if app.documents else [],
+            'status_history': [{'id': h.id, 'old_status': h.old_status, 'new_status': h.new_status, 'changed_by': h.changed_by, 'changed_at': h.changed_at.isoformat() if h.changed_at else None, 'remarks': h.remarks} for h in app.status_history] if app.status_history else [],
+            'loan': _serialize_loan_full(l) if l else None
+        }
+
+    return jsonify({
+        'total_disbursed': total_disbursed,
+        'total_amount': round(total_amount, 2),
+        'today_disbursements': today_count,
+        'today_amount': round(today_amount, 2),
+        'active_repayment': active_repayment,
+        'upcoming_first_emi': upcoming_first_emi,
+        'completed_loans': completed,
+        'overdue_repayments': overdue_count,
+        'monthly_trend': monthly_trend,
+        'type_distribution': type_distribution,
+        'purpose_distribution': purpose_distribution,
+        'repayment_distribution': repayment_distribution,
+        'risk_distribution': risk_distribution,
+        'this_month_amount': this_month_amount,
+        'this_month_count': this_month_count,
+        'average_disbursement': average_disbursement,
+        'daily_trend': daily_trend,
+        'branch_distribution': branch_distribution,
+        'staff_distribution': staff_distribution,
+        'customer_category_distribution': customer_category_distribution,
+        'employment_type_distribution': employment_type_distribution,
+        'disbursed_loans': [_serialize_disbursed(a) for a in disbursed_apps]
+    })
+
 def _compute_portfolio_trend(loans):
     from sqlalchemy import func
     now = _utcnow()
@@ -3088,18 +3287,189 @@ def _is_loan_assigned_to_staff(loan, staff_user):
 @api_bp.route('/admin/disbursed-loans', methods=['GET'])
 @admin_required
 def api_admin_disbursed_loans():
-    disbursed = LoanApplication.query.filter(LoanApplication.status == 'approved').order_by(LoanApplication.approved_at.desc()).all()
-    today = _utcnow().date()
-    today_count = sum(1 for a in disbursed if a.approved_at and a.approved_at.date() == today)
+    now = _utcnow()
+    today = now.date()
     month_start = today.replace(day=1)
-    monthly_total = sum(float(a.amount) for a in disbursed if a.approved_at and a.approved_at.date() >= month_start)
-    avg_size = (sum(float(a.amount) for a in disbursed) / len(disbursed)) if disbursed else 0
+
+    disbursed_apps = LoanApplication.query.filter(LoanApplication.status == 'approved').order_by(LoanApplication.approved_at.desc()).all()
+    customer_ids = [a.customer_id for a in disbursed_apps if a.customer_id]
+    loans = Loan.query.filter(Loan.customer_id.in_(customer_ids), Loan.status.in_(['approved', 'fully_paid'])).options(joinedload(Loan.customer), subqueryload(Loan.repayments)).all() if customer_ids else []
+    loan_map = {l.customer_id: l for l in loans}
+
+    total_disbursed = len(disbursed_apps)
+    total_amount = sum(float(a.amount) for a in disbursed_apps)
+    today_count = sum(1 for a in disbursed_apps if a.approved_at and a.approved_at.date() == today)
+    today_amount = sum(float(a.amount) for a in disbursed_apps if a.approved_at and a.approved_at.date() == today)
+
+    active_repayment = sum(1 for l in loans if l.status == 'approved')
+    completed = sum(1 for l in loans if l.status == 'fully_paid')
+    overdue_count = sum(1 for l in loans if _compute_loan_overdue(l))
+
+    upcoming_first_emi = 0
+    for a in disbursed_apps:
+        l = loan_map.get(a.customer_id)
+        if l and l.status == 'approved' and l.repayments:
+            paid_emis = [r for r in l.repayments if r.status == 'paid']
+            if not paid_emis:
+                next_due = _compute_next_due_date(l)
+                if next_due and next_due.date() <= today + datetime.timedelta(days=7):
+                    upcoming_first_emi += 1
+
+    monthly_trend = []
+    for m in range(1, 13):
+        eom = datetime.date(today.year, m + 1, 1) - datetime.timedelta(days=1) if m < 12 else datetime.date(today.year, 12, 31)
+        som = datetime.date(today.year, m, 1)
+        month_disbursed = [a for a in disbursed_apps if a.approved_at and som <= a.approved_at.date() <= eom]
+        monthly_trend.append({
+            'month': m,
+            'year': today.year,
+            'disbursed_amount': round(sum(float(a.amount) for a in month_disbursed), 2),
+            'loan_count': len(month_disbursed)
+        })
+
+    loan_type_dist = {}
+    for a in disbursed_apps:
+        lt = a.loan_type or 'Other'
+        loan_type_dist[lt] = loan_type_dist.get(lt, 0) + 1
+    total_types = sum(loan_type_dist.values()) or 1
+    type_distribution = [{'label': t, 'value': c, 'percentage': round(c / total_types * 100, 1)} for t, c in sorted(loan_type_dist.items(), key=lambda x: -x[1])]
+
+    purpose_dist = {}
+    for a in disbursed_apps:
+        p = a.purpose or 'Not Specified'
+        purpose_dist[p] = purpose_dist.get(p, 0) + 1
+    total_purp = sum(purpose_dist.values()) or 1
+    purpose_distribution = [{'label': p[:30], 'value': c, 'percentage': round(c / total_purp * 100, 1)} for p, c in sorted(purpose_dist.items(), key=lambda x: -x[1])[:8]]
+
+    repay_status_dist = {}
+    for l in loans:
+        ps = _compute_payment_status(l) if l.status == 'approved' else 'completed'
+        label = {'current': 'Current', 'due_soon': 'Due Soon', 'overdue': 'Overdue'}.get(ps, 'Completed')
+        repay_status_dist[label] = repay_status_dist.get(label, 0) + 1
+    total_repay = sum(repay_status_dist.values()) or 1
+    repayment_distribution = [{'label': k, 'value': v, 'percentage': round(v / total_repay * 100, 1)} for k, v in sorted(repay_status_dist.items(), key=lambda x: -x[1])]
+
+    risk_dist = {}
+    for l in loans:
+        if l.status == 'fully_paid':
+            risk_dist['Low Risk'] = risk_dist.get('Low Risk', 0) + 1
+        else:
+            score = _compute_loan_health(l)
+            if score >= 70: risk_dist['Low Risk'] = risk_dist.get('Low Risk', 0) + 1
+            elif score >= 40: risk_dist['Medium Risk'] = risk_dist.get('Medium Risk', 0) + 1
+            else: risk_dist['High Risk'] = risk_dist.get('High Risk', 0) + 1
+    total_risk = sum(risk_dist.values()) or 1
+    risk_distribution = [{'label': k, 'value': v, 'percentage': round(v / total_risk * 100, 1)} for k, v in sorted(risk_dist.items(), key=lambda x: -x[1])]
+
+    this_month_amount = round(sum(float(a.amount) for a in disbursed_apps if a.approved_at and month_start <= a.approved_at.date() <= today), 2)
+    this_month_count = sum(1 for a in disbursed_apps if a.approved_at and month_start <= a.approved_at.date() <= today)
+    average_disbursement = round(total_amount / total_disbursed, 2) if total_disbursed else 0
+
+    daily_trend = []
+    for i in range(6, -1, -1):
+        d = today - datetime.timedelta(days=i)
+        day_apps = [a for a in disbursed_apps if a.approved_at and a.approved_at.date() == d]
+        daily_trend.append({
+            'date': d.isoformat(),
+            'label': d.strftime('%a'),
+            'full_label': d.strftime('%b %d'),
+            'disbursed_amount': round(sum(float(a.amount) for a in day_apps), 2),
+            'loan_count': len(day_apps)
+        })
+
+    branch_dist = {}
+    for a in disbursed_apps:
+        branch = 'Main Branch'
+        if a.customer and a.customer.address:
+            parts = [p.strip() for p in a.customer.address.split(',')]
+            branch = parts[-1] if len(parts) > 1 else parts[0]
+        branch_dist[branch] = branch_dist.get(branch, 0) + 1
+    total_branches = sum(branch_dist.values()) or 1
+    branch_distribution = [{'label': b, 'value': c, 'percentage': round(c / total_branches * 100, 1)} for b, c in sorted(branch_dist.items(), key=lambda x: -x[1])]
+
+    staff_dist = {}
+    for a in disbursed_apps:
+        sn = a.assigned_staff.username if a.assigned_staff else 'Unassigned'
+        staff_dist[sn] = staff_dist.get(sn, 0) + 1
+    total_staff = sum(staff_dist.values()) or 1
+    staff_distribution = [{'label': s, 'value': c, 'percentage': round(c / total_staff * 100, 1)} for s, c in sorted(staff_dist.items(), key=lambda x: -x[1])]
+
+    cat_dist = {}
+    for a in disbursed_apps:
+        occ = (a.customer.occupation or 'Unknown').strip().lower() if a.customer else 'Unknown'
+        if occ in ('teacher', 'doctor', 'nurse', 'engineer', 'accountant', 'lawyer'):
+            cat = 'Professional'
+        elif occ in ('business', 'entrepreneur', 'trader', 'shopkeeper', 'merchant'):
+            cat = 'Business'
+        elif occ in ('farmer', 'agriculture', 'fisherman'):
+            cat = 'Agriculture'
+        elif occ in ('government', 'civil servant', 'public sector', 'govt employee', 'govt'):
+            cat = 'Government Employee'
+        elif occ in ('private job', 'private employee', 'corporate', 'private sector', 'employed'):
+            cat = 'Private Employee'
+        elif occ in ('student', 'housewife', 'retired', 'unemployed'):
+            cat = 'Other'
+        else:
+            cat = 'Self Employed' if occ and occ != 'unknown' else 'Not Specified'
+        cat_dist[cat] = cat_dist.get(cat, 0) + 1
+    total_cats = sum(cat_dist.values()) or 1
+    customer_category_distribution = [{'label': c, 'value': v, 'percentage': round(v / total_cats * 100, 1)} for c, v in sorted(cat_dist.items(), key=lambda x: -x[1])]
+
+    emp_dist = {}
+    for a in disbursed_apps:
+        occ = (a.customer.occupation or '').strip().lower() if a.customer else ''
+        if occ in ('teacher', 'doctor', 'nurse', 'engineer', 'accountant', 'lawyer', 'government', 'civil servant', 'govt', 'private job', 'private employee', 'corporate'):
+            emp = 'Salaried'
+        elif occ in ('business', 'entrepreneur', 'trader', 'shopkeeper', 'merchant', 'self employed', 'freelancer'):
+            emp = 'Self-Employed'
+        elif occ in ('farmer', 'agriculture', 'fisherman'):
+            emp = 'Agriculture'
+        elif occ in ('student', 'housewife', 'retired', 'unemployed'):
+            emp = 'Other'
+        else:
+            emp = 'Not Specified'
+        emp_dist[emp] = emp_dist.get(emp, 0) + 1
+    total_emp = sum(emp_dist.values()) or 1
+    employment_type_distribution = [{'label': e, 'value': v, 'percentage': round(v / total_emp * 100, 1)} for e, v in sorted(emp_dist.items(), key=lambda x: -x[1])]
+
+    def _serialize_disbursed(app):
+        l = loan_map.get(app.customer_id)
+        return {
+            **{k: getattr(app, k) for k in ('id', 'customer_id', 'amount', 'interest_rate', 'status', 'purpose', 'loan_type')},
+            'application_number': app.application_number,
+            'customer_name': app.customer.full_name if app.customer else None,
+            'customer_phone': app.customer.phone_number if app.customer else '',
+            'assigned_staff_name': app.assigned_staff.username if app.assigned_staff else None,
+            'approved_at': app.approved_at.isoformat() if app.approved_at else None,
+            'status_history': [{'id': h.id, 'new_status': h.new_status, 'remarks': h.remarks, 'changed_by': h.changed_by, 'changed_at': h.changed_at.isoformat() if h.changed_at else None} for h in (app.status_history or [])],
+            'documents': [{'id': d.id, 'document_type': d.document_type, 'file_name': d.file_name, 'file_path': d.file_path} for d in (app.documents or [])],
+            'loan': _serialize_loan_full(l) if l else None
+        }
+
     return jsonify({
-        'total_disbursed': len(disbursed),
+        'total_disbursed': total_disbursed,
+        'total_amount': total_amount,
         'todays_disbursement': today_count,
-        'monthly_total': monthly_total,
-        'average_loan_size': avg_size,
-        'disbursed_loans': [_serialize_loan_application(a) for a in disbursed]
+        'today_disbursements': today_count,
+        'today_amount': today_amount,
+        'active_repayment': active_repayment,
+        'upcoming_first_emi': upcoming_first_emi,
+        'completed_loans': completed,
+        'overdue_repayments': overdue_count,
+        'monthly_trend': monthly_trend,
+        'type_distribution': type_distribution,
+        'purpose_distribution': purpose_distribution,
+        'repayment_distribution': repayment_distribution,
+        'risk_distribution': risk_distribution,
+        'this_month_amount': this_month_amount,
+        'this_month_count': this_month_count,
+        'average_disbursement': average_disbursement,
+        'daily_trend': daily_trend,
+        'branch_distribution': branch_distribution,
+        'staff_distribution': staff_distribution,
+        'customer_category_distribution': customer_category_distribution,
+        'employment_type_distribution': employment_type_distribution,
+        'disbursed_loans': [_serialize_disbursed(a) for a in disbursed_apps]
     })
 
 @api_bp.route('/admin/closed-loans', methods=['GET'])
@@ -3308,6 +3678,7 @@ def api_admin_loan_dashboard():
 @api_bp.route('/staff/loan-dashboard', methods=['GET'])
 @staff_or_admin_required
 def api_staff_loan_dashboard():
+    from sqlalchemy import func
     staff_user = g.current_user
     pending_verification = LoanApplication.query.filter_by(status='submitted').count()
     clarification = LoanApplication.query.filter_by(status='clarification_required').count()
